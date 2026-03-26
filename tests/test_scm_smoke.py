@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from src import generate_dataset
 from src.scm import Posthoc, SCM
 from src.utils import checkConstant, getRng, logUniform, setSeed
 
@@ -19,6 +20,7 @@ class TestSCMSmoke(unittest.TestCase):
             "src.gp",
             "src.activations",
             "src.scm",
+            "src.api",
         ]
         for module_name in modules:
             with self.subTest(module=module_name):
@@ -92,6 +94,32 @@ class TestSCMSmoke(unittest.TestCase):
         self.assertTrue(np.isscalar(scalar))
         self.assertEqual(vec.shape, (5,))
         self.assertTrue(np.issubdtype(vec.dtype, np.integer))
+
+    def test_generate_dataset_api_shape_and_finite(self) -> None:
+        setSeed(21)
+        x = generate_dataset(
+            n_samples=80,
+            n_features=7,
+            n_causes=10,
+            cause_dist="mixed",
+            n_layers=5,
+            n_hidden=24,
+            activation=nn.SiLU,
+            blockwise=True,
+        )
+        self.assertEqual(x.shape, (80, 7))
+        self.assertTrue(np.isfinite(x).all())
+
+    def test_max_retries_raises(self) -> None:
+        setSeed(33)
+        scm = SCM(
+            n_samples=64,
+            n_features=4,
+            n_causes=6,
+            max_retries=0,
+        )
+        with self.assertRaises(RuntimeError):
+            _ = scm.sample()
 
 
 if __name__ == "__main__":

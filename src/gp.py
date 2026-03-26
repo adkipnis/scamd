@@ -1,26 +1,26 @@
-import numpy as np
 import torch
 from torch import nn
 from torch import distributions as D
-from .utils import logUniform
+from .utils import logUniform, getRng
 from .meta import Standardizer
 
 
 # --- GP based activations
 class MaternKernel:
     def __init__(self) -> None:
-        self.df = np.random.choice([1,3,5]) / 2
+        self.df = getRng().choice([1, 3, 5]) / 2
 
     def __repr__(self) -> str:
         return f'Matern-{self.df}'
 
     def __call__(self, k: int, ell: float):
-        scale = self.df ** 0.5 / ell
+        scale = self.df**0.5 / ell
         freqs = D.StudentT(df=self.df).sample((k,)) * scale
         factor = (2 / k) ** 0.5
         return freqs, factor
 
-class SEKernel: # squared exponential / RBF
+
+class SEKernel:  # squared exponential / RBF
     def __repr__(self) -> str:
         return 'SE'
 
@@ -29,15 +29,16 @@ class SEKernel: # squared exponential / RBF
         factor = (2 / k) ** 0.5
         return freqs, factor
 
-class FractKernel: # scale-free fractional kernel
+
+class FractKernel:  # scale-free fractional kernel
     def __repr__(self) -> str:
         return 'Fractional'
 
     def __call__(self, k: int, ell: float):
         freqs = k * torch.rand(k)
-        decay_exponent = -logUniform(0.7, 3.0)
-        factor = freqs ** decay_exponent
-        factor = factor / (factor ** 2).sum().sqrt()
+        decay_exponent = -logUniform(getRng(), 0.7, 3.0)
+        factor = freqs**decay_exponent
+        factor = factor / (factor**2).sum().sqrt()
         return freqs, factor
 
 
@@ -54,11 +55,13 @@ class GP(nn.Module):
 
         # choose kernel
         if gp_type:
-            assert gp_type in self.kernels, f'Kernel not found in {self.kernels.keys()}'
+            assert (
+                gp_type in self.kernels
+            ), f'Kernel not found in {self.kernels.keys()}'
         else:
             gp_type = np.random.choice(
                 list(self.kernels.keys()),
-                p=[0.5, 0.2, 0.3]
+                p=[0.5, 0.2, 0.3],
                 # p=[0.0, 1.0, 0.0]
             )
         self.kernel = self.kernels[gp_type]()
@@ -76,6 +79,3 @@ class GP(nn.Module):
         x = self.standardizer(x)
         phi = torch.cos(self.freqs * x.unsqueeze(-1) + self.bias)
         return phi @ self.weight
-
-
-

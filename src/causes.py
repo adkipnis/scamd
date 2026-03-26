@@ -1,3 +1,5 @@
+"""Sampling utilities for root causes in the SCM generator."""
+
 import numpy as np
 import torch
 from torch import nn

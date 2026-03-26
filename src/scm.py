@@ -26,33 +26,32 @@ def sanityCheck(x: torch.Tensor) -> bool:
 
 
 class SCM(nn.Module):
-    ''' simplified version of the MLP-based structural causal model
-    in https://github.com/soda-inria/tabicl'''
-    def __init__(self,
-                 # data dims
-                 n_samples: int,
-                 n_features: int,
+    """simplified version of the MLP-based structural causal model
+    in https://github.com/soda-inria/tabicl"""
 
-                 # causes
-                 n_causes: int = 10, # number of units in initial layer
-                 cause_dist: str = 'uniform', # [mixed, normal, uniform]
-                 fixed: bool = False, # fixed moments of causes
-
-                 # MLP architecture
-                 n_layers: int = 8,
-                 n_hidden: int = 32,
-                 activation: Callable = nn.Tanh,
-
-                 # weight initialization and feature extraction
-                 sigma_w: float = 1.0, # for weight initialization
-                 contiguous: bool = False, # sample adjacent features
-                 blockwise: bool = True, # use blockwise dropout
-                 p_dropout: float = 0.1, # dropout probability for weights
-
-                 # Gaussian noise
-                 sigma_e: float = 0.01, # for additive noise
-                 vary_sigma_e: bool = True, # allow noise to vary per units
-                 **kwargs):
+    def __init__(
+        self,
+        # data dims
+        n_samples: int,
+        n_features: int,
+        # causes
+        n_causes: int = 10,  # number of units in initial layer
+        cause_dist: str = 'uniform',  # [mixed, normal, uniform]
+        fixed: bool = False,  # fixed moments of causes
+        # MLP architecture
+        n_layers: int = 8,
+        n_hidden: int = 32,
+        activation: Callable = nn.Tanh,
+        # weight initialization and feature extraction
+        sigma_w: float = 1.0,  # for weight initialization
+        contiguous: bool = False,  # sample adjacent features
+        blockwise: bool = True,  # use blockwise dropout
+        p_dropout: float = 0.1,  # dropout probability for weights
+        # Gaussian noise
+        sigma_e: float = 0.01,  # for additive noise
+        vary_sigma_e: bool = True,  # allow noise to vary per units
+        **kwargs,
+    ):
         super().__init__()
         self.n_samples = n_samples
         self.n_features = n_features
@@ -68,14 +67,17 @@ class SCM(nn.Module):
         self.p_dropout = p_dropout
         self.sigma_e = sigma_e
         self.vary_sigma_e = vary_sigma_e
- 
+
         # make sure to have enough hidden units
         self.n_hidden = max(self.n_hidden, 2 * self.n_features)
 
         # init sampler for root nodes
-        self.cs = CauseSampler(self.n_samples, self.n_causes,
-                               dist=self.cause_dist,
-                               fixed=self.fixed)
+        self.cs = CauseSampler(
+            self.n_samples,
+            self.n_causes,
+            dist=self.cause_dist,
+            fixed=self.fixed,
+        )
 
         # build layers
         layers = [self._buildLayer(self.n_causes)]
@@ -86,7 +88,6 @@ class SCM(nn.Module):
         # initialize weights
         with torch.no_grad():
             self._initLayers()
-
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
         # Affine() ->  AdditiveNoise() -> Activation()
@@ -99,24 +100,21 @@ class SCM(nn.Module):
         noise_layer = NoiseLayer(sigma_e)
         return nn.Sequential(affine_layer, noise_layer, self.activation())
 
-
     def _initLayers(self):
         # init linear weights either with regular droput or blockwise dropout
         for i, (_, param) in enumerate(self.layers.named_parameters()):
-            if param.dim() == 2: # skip biases
+            if param.dim() == 2:  # skip biases
                 if self.blockwise:
                     self._initLayerBlockDropout(param)
                 else:
-                    self._initLayer(param, i>0)
-
+                    self._initLayer(param, i > 0)
 
     def _initLayer(self, param, use_dropout: bool = True) -> None:
-        p = self.p_dropout if use_dropout else 0.
+        p = self.p_dropout if use_dropout else 0.0
         p = min(p, 0.99)
         sigma_w = self.sigma_w / ((1 - p) ** 0.5)
         nn.init.normal_(param, std=sigma_w)
         param *= torch.bernoulli(torch.full_like(param, 1 - p))
-
 
     def _initLayerBlockDropout(self, param) -> None:
         # blockwise weight dropout for higher dependency between features
@@ -128,8 +126,9 @@ class SCM(nn.Module):
         keep_prob = (n_blocks * units_per_block) / param.numel()
         sigma_w = self.sigma_w / (keep_prob**0.5)
         for block in range(n_blocks):
-            block_slice = tuple(slice(dim * block, dim * (block + 1))
-                                for dim in block_size)
+            block_slice = tuple(
+                slice(dim * block, dim * (block + 1)) for dim in block_size
+            )
             nn.init.normal_(param[block_slice], std=sigma_w)
 
     def sample(self) -> torch.Tensor:
@@ -145,24 +144,26 @@ class SCM(nn.Module):
             outputs = outputs[1:]  # remove causes
 
             # extract features
-            outputs = torch.cat(outputs, dim=-1) # (n, units)
+            outputs = torch.cat(outputs, dim=-1)  # (n, units)
             n_units = outputs.shape[-1]
             if self.contiguous:
-                start = np.random.randint(0, n_units - self.n_features)
+                start = getRng().integers(0, n_units - self.n_features + 1)
                 perm = start + torch.randperm(self.n_features)
             else:
-                perm = torch.randperm(n_units-1)
-            indices = perm[:self.n_features]
+                perm = torch.randperm(n_units)
+            indices = perm[: self.n_features]
             x = outputs[:, indices]
             if sanityCheck(x):
                 return x
 
 
 class Posthoc(nn.Module):
-    def __init__(self,
-                 n_features: int,
-                 p_posthoc: float = 0.2, # probability of posthoc transformation
-                 **kwargs):
+    def __init__(
+        self,
+        n_features: int,
+        p_posthoc: float = 0.2,  # probability of posthoc transformation
+        **kwargs,
+    ):
         super().__init__()
 
         # posthoc transformations
@@ -172,11 +173,11 @@ class Posthoc(nn.Module):
         for _ in range(self.n_posthoc):
             cfg = {
                 'n_in': n_features,
-                'n_out': np.random.randint(1, 3),
+                'n_out': getRng().integers(1, 3),
                 'standardize': True,
                 # TODO levels, sigma
-                }
-            layer = np.random.choice(phl, replace=True)
+            }
+            layer = getRng().choice(phl)
 
             layers.append(layer(**cfg))
         self.transformations = nn.ModuleList(layers)
@@ -200,8 +201,9 @@ class Posthoc(nn.Module):
 # -----------------------------------------------
 if __name__ == '__main__':
     from tqdm import tqdm
-    from .scm import getActivations
-    from .utils import logUniform, setSeed
+    from .activations import getActivations
+    from .utils import logUniform, setSeed, getRng
+
     setSeed(0)
     batches = 32
 
@@ -211,18 +213,17 @@ if __name__ == '__main__':
     for _ in tqdm(range(batches)):
         config = {
             'n_samples': 512,
-            'n_features': 5, #np.random.randint(3, 8),
-            'n_causes': logUniform(2, 12, round=True),
-            'cause_dist': np.random.choice(['uniform', 'normal', 'mixed']),
-            'fixed': np.random.choice([True, False]),
-            'n_hidden': logUniform(5, 30, round=True, add=4),
-            'n_layers': np.random.randint(8, 32),
-            'activation': np.random.choice(activations),
-            'contiguous': np.random.choice([True, False]),
-            'blockwise': np.random.choice([True, False]),
+            'n_features': 5,  # getRng().integers(3, 8),
+            'n_causes': logUniform(getRng(), 2, 12, round=True),
+            'cause_dist': getRng().choice(['uniform', 'normal', 'mixed']),
+            'fixed': getRng().choice([True, False]),
+            'n_hidden': logUniform(getRng(), 5, 30, round=True, add=4),
+            'n_layers': getRng().integers(8, 32),
+            'activation': getRng().choice(activations),
+            'contiguous': getRng().choice([True, False]),
+            'blockwise': getRng().choice([True, False]),
         }
         scm = SCM(**config)
         ph = Posthoc(**config)
         x = scm.sample()
         x = ph(x)
-

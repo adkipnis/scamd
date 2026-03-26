@@ -3,7 +3,9 @@ from typing import Callable
 import numpy as np
 import torch
 from torch import nn
-from .scm import CauseSampler, getPosthocLayers
+
+from .causes import CauseSampler
+from .posthoc import getPosthocLayers
 from .utils import standardize, checkConstant
 
 phl = getPosthocLayers()

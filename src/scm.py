@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Callable
 import numpy as np
 import torch
@@ -6,9 +5,10 @@ from torch import nn
 
 from .causes import CauseSampler
 from .posthoc import getPosthocLayers
-from .utils import standardize, checkConstant
+from .utils import standardize, checkConstant, getRng
 
 phl = getPosthocLayers()
+
 
 class NoiseLayer(nn.Module):
     def __init__(self, sigma: float | torch.Tensor):
@@ -18,8 +18,8 @@ class NoiseLayer(nn.Module):
     def forward(self, x: torch.Tensor):
         noise = torch.randn_like(x) * self.sigma
         return x + noise
-    
-    
+
+
 def sanityCheck(x: torch.Tensor) -> bool:
     okay = not checkConstant(x.detach().numpy()).any()
     return okay

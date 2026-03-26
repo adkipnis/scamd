@@ -10,7 +10,7 @@ def setSeed(s: int) -> None:
     torch.cuda.manual_seed_all(s)
 
 
-def truncLogUni(
+def logUniform(
     rng: np.random.Generator,
     low: float,
     high: float,

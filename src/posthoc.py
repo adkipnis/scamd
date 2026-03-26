@@ -4,15 +4,14 @@ from torch.nn import functional as F
 from torch import distributions as D
 import numpy as np
 from .meta import Standardizer
+from .utils import getRng
 
 
 # --- deterministic post-hoc layers
 
+
 class Base(nn.Module):
-    def __init__(self,
-                 n_in: int,
-                 n_out: int,
-                 standardize: bool = False):
+    def __init__(self, n_in: int, n_out: int, standardize: bool = False):
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
@@ -20,7 +19,9 @@ class Base(nn.Module):
         if standardize:
             self.standardizer = Standardizer()
         alpha = torch.ones(n_in)
-        self.w = D.Dirichlet(alpha).sample((n_out, self.n_param)).permute(2,0,1)
+        self.w = (
+            D.Dirichlet(alpha).sample((n_out, self.n_param)).permute(2, 0, 1)
+        )
 
     @property
     def n_param(self) -> int:
@@ -41,12 +42,9 @@ class Threshold(Base):
 
 
 class MultiThreshold(Base):
-    def __init__(self,
-                 n_in: int,
-                 n_out: int,
-                 standardize: bool = False,
-                 levels: int = 3
-                 ):
+    def __init__(
+        self, n_in: int, n_out: int, standardize: bool = False, levels: int = 3
+    ):
         super().__init__(n_in, n_out, standardize)
         self.levels = levels # number of thresholds
         self.tau = np.sort(np.random.normal(size=levels-1))
@@ -60,15 +58,12 @@ class MultiThreshold(Base):
 
 
 class QuantileBins(Base):
-    def __init__(self,
-                 n_in: int,
-                 n_out: int,
-                 standardize: bool = False,
-                 levels: int = 3
-                 ):
+    def __init__(
+        self, n_in: int, n_out: int, standardize: bool = False, levels: int = 3
+    ):
         super().__init__(n_in, n_out, standardize)
-        self.levels = levels # number of quantiles
-        quantiles = np.sort(np.random.random(size=levels-1))
+        self.levels = levels  # number of quantiles
+        quantiles = np.sort(getRng().random(size=levels - 1))
         self.quantiles = torch.tensor(quantiles).float()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -87,19 +82,21 @@ class Rank(Base):
 
 # --- stochastic post-hoc layers
 class Stochastic(Base):
-    def __init__(self,
-                 n_in: int,
-                 n_out: int,
-                 standardize: bool = False,
-                 sigma: float = 0.01,
-                 ):
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int,
+        standardize: bool = False,
+        sigma: float = 0.01,
+    ):
         super().__init__(n_in, n_out, standardize)
-        self.sigma = sigma # noise standard deviation
+        self.sigma = sigma  # noise standard deviation
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         x = super().preprocess(x)
         x = x + torch.randn_like(x) * self.sigma
         return x
+
 
 class Categorical(Stochastic):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -129,6 +126,7 @@ class Geometric(Stochastic):
         x = self.preprocess(x)[..., 0]
         x = D.Geometric(logits=x).sample()
         return x
+
 
 class NegativeBinomial(Stochastic):
     @property
@@ -203,4 +201,3 @@ if __name__ == '__main__':
 
     model = NegativeBinomial(d, 1)
     test(model, x)
-

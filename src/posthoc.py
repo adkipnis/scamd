@@ -1,3 +1,5 @@
+"""Deterministic and stochastic post-hoc feature transformations."""
+
 import torch
 from torch import nn
 from torch.nn import functional as F

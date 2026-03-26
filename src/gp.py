@@ -59,7 +59,7 @@ class GP(nn.Module):
                 gp_type in self.kernels
             ), f'Kernel not found in {self.kernels.keys()}'
         else:
-            gp_type = np.random.choice(
+            gp_type = getRng().choice(
                 list(self.kernels.keys()),
                 p=[0.5, 0.2, 0.3],
                 # p=[0.0, 1.0, 0.0]
@@ -67,7 +67,7 @@ class GP(nn.Module):
         self.kernel = self.kernels[gp_type]()
 
         # setup parameters
-        ell = logUniform(0.1, 16.0)
+        ell = logUniform(getRng(), 0.1, 16.0)
         self.freqs, factor = self.kernel(k, ell)
         self.bias = 2 * torch.pi * torch.rand(k)
         self.weight = factor * torch.randn(k)

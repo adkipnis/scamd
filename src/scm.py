@@ -182,17 +182,18 @@ class Posthoc(nn.Module):
             layers.append(layer(**cfg))
         self.transformations = nn.ModuleList(layers)
 
-    def __call__(self, x: torch.Tensor) -> np.ndarray:
+    def forward(self, x: torch.Tensor) -> np.ndarray:
         if self.n_posthoc > 0:
             out = []
             for t in self.transformations:
                 h = t(x)
                 if sanityCheck(h):
                     out.append(h)
-            z = torch.cat(out, dim=-1)
-            x = torch.cat([x,z], dim=-1)
-            idx = torch.randperm(x.shape[-1])[:self.n_features]
-            x = x[..., idx]
+            if out:
+                z = torch.cat(out, dim=-1)
+                x = torch.cat([x, z], dim=-1)
+                idx = torch.randperm(x.shape[-1])[: self.n_features]
+                x = x[..., idx]
         x = x.detach().numpy()
         x = standardize(x, axis=0)
         return x

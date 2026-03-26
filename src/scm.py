@@ -162,9 +162,11 @@ class Posthoc(nn.Module):
         self,
         n_features: int,
         p_posthoc: float = 0.2,  # probability of posthoc transformation
+        standardize: bool = False,
         **kwargs,
     ):
         super().__init__()
+        self.standardize = standardize
 
         # posthoc transformations
         self.n_features = n_features
@@ -195,7 +197,8 @@ class Posthoc(nn.Module):
                 idx = torch.randperm(x.shape[-1])[: self.n_features]
                 x = x[..., idx]
         x = x.detach().numpy()
-        x = standardize(x, axis=0)
+        if self.standardize:
+            x = standardize(x, axis=0)
         return x
 
 

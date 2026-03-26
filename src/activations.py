@@ -2,7 +2,7 @@ from .basic import basic_activations
 from .gp import GP
 from .meta import RandomScaleFactory, RandomChoiceFactory
 
-def getActivations():
+def getActivations() -> list:
     activations = basic_activations.copy()
     activations += [GP] * 12
     activations = [RandomScaleFactory(act) for act in activations]

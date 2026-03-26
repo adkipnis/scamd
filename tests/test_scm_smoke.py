@@ -13,14 +13,14 @@ from src.utils import checkConstant, getRng, logUniform, setSeed
 class TestSCMSmoke(unittest.TestCase):
     def test_module_imports(self) -> None:
         modules = [
-            "src.basic",
-            "src.meta",
-            "src.causes",
-            "src.posthoc",
-            "src.gp",
-            "src.activations",
-            "src.scm",
-            "src.api",
+            'src.basic',
+            'src.meta',
+            'src.causes',
+            'src.posthoc',
+            'src.gp',
+            'src.activations',
+            'src.scm',
+            'src.api',
         ]
         for module_name in modules:
             with self.subTest(module=module_name):
@@ -33,7 +33,7 @@ class TestSCMSmoke(unittest.TestCase):
             n_samples=128,
             n_features=6,
             n_causes=8,
-            cause_dist="normal",
+            cause_dist='normal',
             fixed=True,
             n_layers=4,
             n_hidden=16,
@@ -52,7 +52,7 @@ class TestSCMSmoke(unittest.TestCase):
             n_samples=96,
             n_features=5,
             n_causes=7,
-            cause_dist="uniform",
+            cause_dist='uniform',
             fixed=True,
             n_layers=3,
             n_hidden=12,
@@ -69,16 +69,16 @@ class TestSCMSmoke(unittest.TestCase):
 
     def test_reproducible_with_seed(self) -> None:
         cfg = {
-            "n_samples": 64,
-            "n_features": 4,
-            "n_causes": 6,
-            "cause_dist": "normal",
-            "fixed": True,
-            "n_layers": 3,
-            "n_hidden": 10,
-            "activation": nn.Tanh,
-            "blockwise": False,
-            "vary_sigma_e": False,
+            'n_samples': 64,
+            'n_features': 4,
+            'n_causes': 6,
+            'cause_dist': 'normal',
+            'fixed': True,
+            'n_layers': 3,
+            'n_hidden': 10,
+            'activation': nn.Tanh,
+            'blockwise': False,
+            'vary_sigma_e': False,
         }
         setSeed(123)
         x1 = SCM(**cfg).sample()
@@ -101,7 +101,7 @@ class TestSCMSmoke(unittest.TestCase):
             n_samples=80,
             n_features=7,
             n_causes=10,
-            cause_dist="mixed",
+            cause_dist='mixed',
             n_layers=5,
             n_hidden=24,
             activation=nn.SiLU,
@@ -122,5 +122,5 @@ class TestSCMSmoke(unittest.TestCase):
             _ = scm.sample()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

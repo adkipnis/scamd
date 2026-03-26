@@ -28,12 +28,12 @@ Python `>=3.12` is required.
 ```python
 from torch import nn
 
-from src.scm import SCM, Posthoc
+from src import generate_dataset
 from src.utils import setSeed
 
 setSeed(42)
 
-scm = SCM(
+x = generate_dataset(
     n_samples=1000,
     n_features=20,
     n_causes=12,
@@ -43,8 +43,6 @@ scm = SCM(
     activation=nn.Tanh,
     blockwise=True,
 )
-
-x_latent = scm.sample()      # torch.Tensor, shape: (1000, 20)
-x = Posthoc(n_features=20)(x_latent)  # np.ndarray, standardized, shape: (1000, 20)
 ```
 
+See `examples/quickstart.py` for a runnable script.

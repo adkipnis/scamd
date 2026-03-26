@@ -1,3 +1,5 @@
+"""Public API for synthetic dataset generation."""
+
 from typing import Any
 
 import numpy as np

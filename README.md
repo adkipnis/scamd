@@ -1,4 +1,4 @@
-# Structural CAusal Model Datsets
+# Structural CAusal Model Datsets (scamd)
 
 Generate realistic synthetic tabular datasets with a structural causal model (SCM).
 

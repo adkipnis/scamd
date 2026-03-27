@@ -112,18 +112,21 @@ class Categorical(Stochastic):
     """Produce one-hot categorical outputs from noisy logits."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Convert logits to one-hot classes with an implicit reference class."""
-        x = self.preprocess(x)[..., 0]
+        """Sample one-hot classes with an implicit reference category."""
+        logits = self.preprocess(x)[..., 0] / self.temperature
 
         # include reference category and get probs
-        zeros = torch.zeros_like(x[..., 0:1])
-        x = torch.cat([x, zeros], dim=-1)
-        probs = F.softmax(x, dim=-1)
+        zeros = torch.zeros_like(logits[..., 0:1])
+        logits = torch.cat([logits, zeros], dim=-1)
+        probs = F.softmax(logits, dim=-1)
 
-        # dummy code categories
-        x = probs.argmax(-1)
-        x = F.one_hot(x, num_classes=self.n_out + 1)[..., 1:]
-        return x
+        # sample categories and dummy-code non-reference levels
+        shape = probs.shape
+        ids = torch.multinomial(probs.reshape(-1, shape[-1]), 1).reshape(
+            shape[:-1]
+        )
+        out = F.one_hot(ids, num_classes=self.n_out + 1)[..., 1:].float()
+        return out
 
 
 class Poisson(Stochastic):

@@ -7,7 +7,7 @@ distribution changes with GP/random-choice settings.
 import matplotlib.pyplot as plt
 import torch
 
-from scamd.activations import getActivations
+from scamd.pool import getActivations
 from scamd.utils import getRng, setSeed
 
 

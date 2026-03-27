@@ -20,7 +20,7 @@ class TestRngConsistency(unittest.TestCase):
             'scamd/gp.py',
             'scamd/posthoc.py',
             'scamd/scm.py',
-            'scamd/activations.py',
+            'scamd/pool.py',
             'scamd/meta.py',
         ]
         offenders: list[str] = []

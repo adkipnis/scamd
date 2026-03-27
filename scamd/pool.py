@@ -1,4 +1,4 @@
-"""Activation factory for composing basic, GP, and random-choice activations."""
+"""Activation-pool factory for composing basic, GP, and random-choice activations."""
 
 from functools import partial
 from typing import Callable, Literal

@@ -18,7 +18,7 @@ class TestSCMSmoke(unittest.TestCase):
             'scamd.causes',
             'scamd.posthoc',
             'scamd.gp',
-            'scamd.activations',
+            'scamd.pool',
             'scamd.scm',
             'scamd.api',
         ]

@@ -1,5 +1,6 @@
 """Gaussian-process-inspired nonlinear activation modules."""
 
+from typing import Literal
 import torch
 from torch import nn
 from torch import distributions as D
@@ -32,11 +33,11 @@ class SEKernel:  # squared exponential / RBF
         return freqs, factor
 
 
-class FractKernel:  # scale-free fractional kernel
+class FractionalKernel:  # scale-free fractional kernel
     def __repr__(self) -> str:
         return 'Fractional'
 
-    def __call__(self, k: int, ell: float):
+    def __call__(self, k: int, ell: float = 0.0):
         freqs = k * torch.rand(k)
         decay_exponent = -logUniform(getRng(), 0.7, 3.0)
         factor = freqs**decay_exponent
@@ -46,13 +47,13 @@ class FractKernel:  # scale-free fractional kernel
 
 class GP(nn.Module):
     # sample from a GP with a random kernel [SE, Matern, Fractal]
-    def __init__(self, k: int = 512, gp_type: str = ''):
+    def __init__(self, k: int = 512, gp_type: Literal['se', 'matern', 'fractional'] = 'fractional'):
         super().__init__()
         self.standardizer = Standardizer()
         self.kernels = {
-            'Matern': MaternKernel,
-            'SE': SEKernel,
-            'Fract': FractKernel,
+            'matern': MaternKernel,
+            'se': SEKernel,
+            'fractional': FractionalKernel,
         }
 
         # choose kernel

@@ -16,15 +16,15 @@ POOL_PRESETS: dict[str, dict[str, Any]] = {
         'allow_nested_random_choice': False,
     },
     'balanced_realistic': {
-        'n_gp': 12,
-        'n_random_choice': 1,
+        'n_gp': 16,
+        'n_random_choice': 3,
         'random_scale': True,
         'gp_type_probs': (0.35, 0.25, 0.40),
         'allow_nested_random_choice': False,
     },
     'high_variability': {
         'n_gp': 20,
-        'n_random_choice': 2,
+        'n_random_choice': 5,
         'random_scale': True,
         'gp_type_probs': (0.2, 0.25, 0.55),
         'allow_nested_random_choice': False,
@@ -35,7 +35,7 @@ POOL_PRESETS: dict[str, dict[str, Any]] = {
 DATASET_PRESETS: dict[str, dict[str, Any]] = {
     'smooth_stable': {
         'p_posthoc': 0.10,
-        'cause_dist': 'mixed',
+        'cause_dist': 'uniform',
         'fixed': True,
         'pool_preset': 'smooth_stable',
     },

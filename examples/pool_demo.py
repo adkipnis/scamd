@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from scamd.pool import getActivations
+from scamd.presets import POOL_PRESETS, PRESET_LABELS
 from scamd.utils import getRng, setSeed
 
 
@@ -29,41 +30,9 @@ def plot_activation_pools() -> None:
     x = torch.linspace(-5, 5, 400).view(-1, 1)
     x_np = x[:, 0].numpy()
 
+    preset_names = ['balanced_realistic', 'smooth_stable', 'high_variability']
     presets = [
-        (
-            'Balanced Realistic',
-            dict(
-                n_gp=12,
-                n_random_choice=8,
-                random_scale=True,
-                gp_type_probs=(0.35, 0.25, 0.40),
-                n_choice=2,
-                allow_nested_random_choice=False,
-            ),
-        ),
-        (
-            'Smooth + Stable',
-            dict(
-                n_gp=8,
-                n_random_choice=4,
-                random_scale=True,
-                gp_types=('se', 'matern'),
-                gp_type_probs=(0.7, 0.3),
-                n_choice=1,
-                allow_nested_random_choice=False,
-            ),
-        ),
-        (
-            'High Variability',
-            dict(
-                n_gp=20,
-                n_random_choice=12,
-                random_scale=True,
-                gp_type_probs=(0.2, 0.25, 0.55),
-                n_choice=3,
-                allow_nested_random_choice=False,
-            ),
-        ),
+        (PRESET_LABELS[name], POOL_PRESETS[name]) for name in preset_names
     ]
 
     fig, axes = plt.subplots(len(presets), 1, figsize=(10, 11), sharex=True)

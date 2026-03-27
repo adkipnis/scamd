@@ -10,6 +10,7 @@ import pandas as pd
 
 from scamd.plotting import plot_dataset
 from scamd.pool import getActivations
+from scamd.presets import DATASET_PRESETS, PRESET_LABELS, get_pool_preset
 from scamd.scm import Posthoc, SCM
 from scamd.utils import getRng, setSeed
 
@@ -24,9 +25,15 @@ def _offdiag_abs_corr(x: np.ndarray) -> np.ndarray:
 def _sample_pipeline(
     n_samples: int,
     n_features: int,
+    n_causes: int,
+    n_layers: int,
+    n_hidden: int,
+    blockwise: bool,
     p_posthoc: float,
-    scm_kwargs: dict,
+    cause_dist: str,
+    fixed: bool,
     pool_kwargs: dict,
+    **scm_extra,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Sample one dataset before and after Posthoc transformation."""
     pool = getActivations(**pool_kwargs)
@@ -35,8 +42,14 @@ def _sample_pipeline(
     config = {
         'n_samples': n_samples,
         'n_features': n_features,
+        'n_causes': n_causes,
+        'n_layers': n_layers,
+        'n_hidden': n_hidden,
+        'blockwise': blockwise,
+        'cause_dist': cause_dist,
+        'fixed': fixed,
         'activation': activation,
-        **scm_kwargs,
+        **scm_extra,
     }
     scm = SCM(**config)
     x = scm.sample()
@@ -48,90 +61,50 @@ def _sample_pipeline(
 
 def plot_scm_presets() -> None:
     """Plot dependence spectra for three realistic SCM presets."""
-    presets = [
-        (
-            'Balanced Realistic',
-            dict(
-                n_samples=1500,
-                n_features=24,
-                p_posthoc=0.25,
-                scm_kwargs=dict(
-                    n_causes=12,
-                    cause_dist='mixed',
-                    fixed=False,
-                    n_layers=8,
-                    n_hidden=64,
-                    contiguous=False,
-                    blockwise=True,
-                    sigma_e=0.02,
-                    vary_sigma_e=True,
+    preset_names = ['balanced_realistic', 'smooth_stable', 'high_variability']
+    presets = []
+    for name in preset_names:
+        cfg = DATASET_PRESETS[name]
+        presets.append(
+            (
+                PRESET_LABELS[name],
+                dict(
+                    n_samples=1500,
+                    n_features=24,
+                    n_causes={
+                        'balanced_realistic': 12,
+                        'smooth_stable': 10,
+                        'high_variability': 16,
+                    }[name],
+                    n_layers={
+                        'balanced_realistic': 8,
+                        'smooth_stable': 6,
+                        'high_variability': 10,
+                    }[name],
+                    n_hidden={
+                        'balanced_realistic': 64,
+                        'smooth_stable': 56,
+                        'high_variability': 96,
+                    }[name],
+                    blockwise={
+                        'balanced_realistic': True,
+                        'smooth_stable': False,
+                        'high_variability': True,
+                    }[name],
+                    p_posthoc=cfg['p_posthoc'],
+                    cause_dist=cfg['cause_dist'],
+                    fixed=cfg['fixed'],
+                    pool_kwargs=get_pool_preset(cfg['pool_preset']),
+                    contiguous=(name == 'smooth_stable'),
+                    sigma_e={
+                        'balanced_realistic': 0.02,
+                        'smooth_stable': 0.01,
+                        'high_variability': 0.04,
+                    }[name],
+                    vary_sigma_e=(name != 'smooth_stable'),
                 ),
-                pool_kwargs=dict(
-                    n_gp=12,
-                    n_random_choice=8,
-                    random_scale=True,
-                    gp_type_probs=(0.35, 0.25, 0.40),
-                    n_choice=2,
-                    allow_nested_random_choice=False,
-                ),
-            ),
-        ),
-        (
-            'Smooth + Stable',
-            dict(
-                n_samples=1500,
-                n_features=24,
-                p_posthoc=0.15,
-                scm_kwargs=dict(
-                    n_causes=10,
-                    cause_dist='normal',
-                    fixed=True,
-                    n_layers=6,
-                    n_hidden=56,
-                    contiguous=True,
-                    blockwise=False,
-                    sigma_e=0.01,
-                    vary_sigma_e=False,
-                ),
-                pool_kwargs=dict(
-                    n_gp=8,
-                    n_random_choice=4,
-                    random_scale=True,
-                    gp_types=('se', 'matern'),
-                    gp_type_probs=(0.7, 0.3),
-                    n_choice=1,
-                    allow_nested_random_choice=False,
-                ),
-            ),
-        ),
-        (
-            'High Variability',
-            dict(
-                n_samples=1500,
-                n_features=24,
-                p_posthoc=0.45,
-                scm_kwargs=dict(
-                    n_causes=16,
-                    cause_dist='mixed',
-                    fixed=False,
-                    n_layers=10,
-                    n_hidden=96,
-                    contiguous=False,
-                    blockwise=True,
-                    sigma_e=0.04,
-                    vary_sigma_e=True,
-                ),
-                pool_kwargs=dict(
-                    n_gp=20,
-                    n_random_choice=12,
-                    random_scale=True,
-                    gp_type_probs=(0.2, 0.25, 0.55),
-                    n_choice=3,
-                    allow_nested_random_choice=False,
-                ),
-            ),
-        ),
-    ]
+            )
+        )
 
     fig, axes = plt.subplots(len(presets), 1, figsize=(10, 11), sharex=True)
     axes = list(getattr(axes, 'flat', [axes]))
@@ -160,29 +133,21 @@ def plot_scm_presets() -> None:
 
 def plot_pairgrid_example() -> None:
     """Show pair-grid structure for one realistic SCM preset."""
+    base_cfg = DATASET_PRESETS['balanced_realistic']
     cfg = dict(
         n_samples=1200,
         n_features=8,
-        p_posthoc=0.3,
-        scm_kwargs=dict(
-            n_causes=12,
-            cause_dist='mixed',
-            fixed=False,
-            n_layers=8,
-            n_hidden=64,
-            contiguous=False,
-            blockwise=True,
-            sigma_e=0.02,
-            vary_sigma_e=True,
-        ),
-        pool_kwargs=dict(
-            n_gp=12,
-            n_random_choice=8,
-            random_scale=True,
-            gp_type_probs=(0.35, 0.25, 0.40),
-            n_choice=2,
-            allow_nested_random_choice=False,
-        ),
+        n_causes=12,
+        n_layers=8,
+        n_hidden=64,
+        blockwise=True,
+        p_posthoc=base_cfg['p_posthoc'],
+        cause_dist=base_cfg['cause_dist'],
+        fixed=base_cfg['fixed'],
+        pool_kwargs=get_pool_preset(base_cfg['pool_preset']),
+        contiguous=False,
+        sigma_e=0.02,
+        vary_sigma_e=True,
     )
     base, transformed = _sample_pipeline(**cfg)
     cols = [f'x{i + 1}' for i in range(base.shape[1])]

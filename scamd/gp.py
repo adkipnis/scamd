@@ -74,9 +74,12 @@ class GP(nn.Module):
 
         # setup parameters
         ell = logUniform(getRng(), 0.1, 16.0)
-        self.freqs, factor = self.kernel(k, ell)
-        self.bias = 2 * torch.pi * torch.rand(k)
-        self.weight = factor * torch.randn(k)
+        freqs, factor = self.kernel(k, ell)
+        bias = 2 * torch.pi * torch.rand(k)
+        weight = factor * torch.randn(k)
+        self.register_buffer('freqs', freqs)
+        self.register_buffer('bias', bias)
+        self.register_buffer('weight', weight)
 
     def __repr__(self) -> str:
         return f'GP-{self.kernel}'

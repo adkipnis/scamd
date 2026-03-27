@@ -1,17 +1,20 @@
 """Gaussian-process-inspired nonlinear activation modules."""
 
 from typing import Literal
+import numpy as np
 import torch
 from torch import nn
 from torch import distributions as D
-from .utils import logUniform, getRng
-from .meta import Standardizer
 
+from scamd.utils import logUniform
+from scamd.meta import Standardizer
+
+RNG = np.random.default_rng(0)
 
 # --- GP based activations
 class MaternKernel:
     def __init__(self) -> None:
-        self.df = getRng().choice([1, 3, 5]) / 2
+        self.df = np.random.choice([1, 3, 5]) / 2
 
     def __repr__(self) -> str:
         return f'Matern-{self.df}'
@@ -39,7 +42,7 @@ class FractionalKernel:  # scale-free fractional kernel
 
     def __call__(self, k: int, ell: float = 0.0):
         freqs = (k * torch.rand(k)).clamp_min(1e-6)
-        decay_exponent = -float(logUniform(getRng(), 0.7, 3.0))
+        decay_exponent = -float(logUniform(RNG, 0.7, 3.0))
         factor = freqs**decay_exponent
         factor = factor / (factor**2).sum().sqrt()
         return freqs, factor
@@ -64,7 +67,7 @@ class GP(nn.Module):
         self.standardizer = Standardizer()
         # choose kernel
         if gp_type is None:
-            gp_type = getRng().choice(
+            gp_type = RNG.choice(
                 list(KERNELS.keys()),
                 p=[0.5, 0.2, 0.3],
             )
@@ -73,7 +76,7 @@ class GP(nn.Module):
         self.kernel = KERNELS[gp_type]()   # type: ignore
 
         # setup parameters
-        ell = logUniform(getRng(), 0.1, 16.0)
+        ell = logUniform(RNG, 0.1, 16.0)
         freqs, factor = self.kernel(k, ell)
         bias = 2 * torch.pi * torch.rand(k)
         weight = factor * torch.randn(k)

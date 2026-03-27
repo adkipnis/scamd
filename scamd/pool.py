@@ -8,7 +8,6 @@ import numpy as np
 from .basic import basic_activations
 from .gp import GP
 from .meta import RandomScaleFactory, RandomChoiceFactory
-from .utils import getRng
 
 
 def getActivations(
@@ -54,7 +53,6 @@ def getActivations(
     if len(gp_types) != len(gp_type_probs):
         raise ValueError('gp_types and gp_type_probs must have same length')
 
-    rng = getRng()
     probs = np.asarray(gp_type_probs, dtype=float)
     if (probs < 0).any() or probs.sum() <= 0:
         raise ValueError('gp_type_probs must be non-negative and sum to > 0')
@@ -65,7 +63,7 @@ def getActivations(
         base_pool.extend(basic_activations.copy())
 
     # Add GP factories with explicit kernel draws to control morphology mix.
-    sampled_gp_types = rng.choice(gp_types, size=n_gp, p=probs)
+    sampled_gp_types = np.random.choice(gp_types, size=n_gp, p=probs)
     base_pool.extend(
         partial(GP, gp_type=str(gp_type)) for gp_type in sampled_gp_types
     )

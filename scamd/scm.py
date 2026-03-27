@@ -148,7 +148,10 @@ class SCM(nn.Module):
 
     def sample(self) -> torch.Tensor:
         """Generate one synthetic feature matrix passing sanity checks."""
-        for _ in range(self.max_retries):
+        for attempt in range(self.max_retries):
+            if attempt > 0:
+                with torch.no_grad():
+                    self._initLayers()
             causes = self.cs.sample()  # (seq_len, num_causes)
 
             # pass through each mlp layer
@@ -161,13 +164,38 @@ class SCM(nn.Module):
 
             # extract features
             outputs = torch.cat(outputs, dim=-1)  # (n, units)
+            outputs_np = outputs.detach().cpu().numpy()
+            valid = ~checkConstant(outputs_np, axis=0)
+            valid_indices = np.flatnonzero(valid)
+            if valid_indices.size < self.n_features:
+                continue
+
             n_units = outputs.shape[-1]
+            indices: torch.Tensor
             if self.contiguous:
-                start = getRng().integers(0, n_units - self.n_features + 1)
-                perm = start + torch.randperm(self.n_features)
+                max_start = n_units - self.n_features + 1
+                starts = getRng().permutation(max_start)
+                chosen = None
+                for start in starts[: min(max_start, 32)]:
+                    window = np.arange(start, start + self.n_features)
+                    if valid[window].all():
+                        chosen = window
+                        break
+                if chosen is None:
+                    chosen = getRng().choice(
+                        valid_indices,
+                        size=self.n_features,
+                        replace=False,
+                    )
+                indices = torch.as_tensor(chosen, device=outputs.device)
             else:
-                perm = torch.randperm(n_units)
-            indices = perm[: self.n_features]
+                chosen = getRng().choice(
+                    valid_indices,
+                    size=self.n_features,
+                    replace=False,
+                )
+                indices = torch.as_tensor(chosen, device=outputs.device)
+
             x = outputs[:, indices]
             if sanityCheck(x):
                 return x

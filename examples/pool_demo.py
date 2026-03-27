@@ -3,24 +3,23 @@
 This demo compares a few pool configurations to show how the activation
 distribution changes with GP/random-choice settings.
 """
-
+import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
 from scamd.pool import getActivations
 from scamd.presets import POOL_PRESETS, PRESET_LABELS
-from scamd.utils import getRng, setSeed
-
 
 def _sample_pool_curves(
     pool: list, x: torch.Tensor, n_curves: int
 ) -> list[torch.Tensor]:
     """Instantiate random activation callables from a pool and evaluate on x."""
-    idx = getRng().integers(0, len(pool), size=n_curves)
+    idx = np.random.randint(0, len(pool), size=n_curves)
     curves = []
     for i in idx:
         layer = pool[int(i)]()
         y = layer(x).detach().float()
+        y = (y - y.mean()) / y.std()
         curves.append(y[:, 0])
     return curves
 
@@ -40,7 +39,7 @@ def plot_activation_pools() -> None:
 
     for ax, (title, kwargs) in zip(axes, presets):
         pool = getActivations(**kwargs)
-        curves = _sample_pool_curves(pool, x, n_curves=12)
+        curves = _sample_pool_curves(pool, x, n_curves=16)
         for y in curves:
             ax.plot(x_np, y.numpy(), alpha=0.65, linewidth=1.1)
         ax.set_title(f'{title}  (pool size={len(pool)})', size=11)
@@ -52,5 +51,4 @@ def plot_activation_pools() -> None:
 
 
 if __name__ == '__main__':
-    setSeed(7)
     plot_activation_pools()

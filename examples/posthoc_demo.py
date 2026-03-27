@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from scamd.posthoc import getPosthocLayers
+from scamd.posthoc import POSTHOC_LAYERS
 from scamd.utils import setSeed
 
 
@@ -21,8 +21,7 @@ def pearson_corr(x: np.ndarray, y: np.ndarray) -> float:
 
 def plot_posthoc_grid() -> None:
     """Plot every available post-hoc transform against the same input grid."""
-    classes = getPosthocLayers()
-    n_plots = len(classes)
+    n_plots = len(POSTHOC_LAYERS)
     ncol = 3
     nrow = math.ceil(n_plots / ncol)
 
@@ -32,7 +31,7 @@ def plot_posthoc_grid() -> None:
     fig, axes = plt.subplots(nrow, ncol, figsize=(12, 8))
     axes = list(getattr(axes, 'flat', [axes]))
 
-    for i, layer_cls in enumerate(classes):
+    for i, layer_cls in enumerate(POSTHOC_LAYERS):
         layer = layer_cls(n_in=1, n_out=1)
         y = layer(x).float()
         y_np = y[0, :, 0].detach().numpy()

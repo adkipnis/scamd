@@ -13,23 +13,28 @@ phl = getPosthocLayers()
 
 
 class NoiseLayer(nn.Module):
+    """Add elementwise Gaussian noise with a configurable scale."""
+
     def __init__(self, sigma: float | torch.Tensor):
+        """Store the noise scale used during forward passes."""
         super().__init__()
         self.sigma = sigma
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the input perturbed by i.i.d. Gaussian noise."""
         noise = torch.randn_like(x) * self.sigma
         return x + noise
 
 
 def sanityCheck(x: torch.Tensor) -> bool:
-    okay = not checkConstant(x.detach().numpy()).any()
+    """Check that no feature column is constant across samples."""
+    x_np = x.detach().cpu().numpy()
+    okay = not checkConstant(x_np).any()
     return okay
 
 
 class SCM(nn.Module):
-    """simplified version of the MLP-based structural causal model
-    in https://github.com/soda-inria/tabicl"""
+    """Sample synthetic features using an MLP-based structural causal model."""
 
     def __init__(
         self,
@@ -54,6 +59,7 @@ class SCM(nn.Module):
         vary_sigma_e: bool = True,  # allow noise to vary per units
         **kwargs,
     ):
+        """Initialize SCM sampling modules and random MLP layers."""
         super().__init__()
         self.n_samples = n_samples
         self.n_features = n_features
@@ -93,6 +99,7 @@ class SCM(nn.Module):
             self._initLayers()
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
+        """Create one affine-noise-activation block."""
         # Affine() ->  AdditiveNoise() -> Activation()
         if input_dim == 0:
             input_dim = self.n_hidden
@@ -104,22 +111,27 @@ class SCM(nn.Module):
         return nn.Sequential(affine_layer, noise_layer, self.activation())
 
     def _initLayers(self):
+        """Initialize all linear weight matrices in the network."""
         # init linear weights either with regular droput or blockwise dropout
-        for i, (_, param) in enumerate(self.layers.named_parameters()):
-            if param.dim() == 2:  # skip biases
-                if self.blockwise:
-                    self._initLayerBlockDropout(param)
-                else:
-                    self._initLayer(param, i > 0)
+        for i, block in enumerate(self.layers):
+            param = block[0].weight
+            if self.blockwise:
+                self._initLayerBlockDropout(param)
+            else:
+                self._initLayer(param, i > 0)
 
-    def _initLayer(self, param, use_dropout: bool = True) -> None:
+    def _initLayer(
+        self, param: torch.Tensor, use_dropout: bool = True
+    ) -> None:
+        """Sample dense Gaussian weights with optional Bernoulli dropout."""
         p = self.p_dropout if use_dropout else 0.0
         p = min(p, 0.99)
         sigma_w = self.sigma_w / ((1 - p) ** 0.5)
         nn.init.normal_(param, std=sigma_w)
         param *= torch.bernoulli(torch.full_like(param, 1 - p))
 
-    def _initLayerBlockDropout(self, param) -> None:
+    def _initLayerBlockDropout(self, param: torch.Tensor) -> None:
+        """Initialize weights in block-diagonal Gaussian submatrices."""
         # blockwise weight dropout for higher dependency between features
         nn.init.zeros_(param)
         max_blocks = np.ceil(np.sqrt(min(param.shape)))
@@ -135,6 +147,7 @@ class SCM(nn.Module):
             nn.init.normal_(param[block_slice], std=sigma_w)
 
     def sample(self) -> torch.Tensor:
+        """Generate one synthetic feature matrix passing sanity checks."""
         for _ in range(self.max_retries):
             causes = self.cs.sample()  # (seq_len, num_causes)
 
@@ -164,6 +177,8 @@ class SCM(nn.Module):
 
 
 class Posthoc(nn.Module):
+    """Apply optional post-hoc feature transformations to SCM outputs."""
+
     def __init__(
         self,
         n_features: int,
@@ -171,6 +186,7 @@ class Posthoc(nn.Module):
         standardize: bool = True,
         **kwargs,
     ):
+        """Initialize a random set of post-hoc transformation layers."""
         super().__init__()
         self.standardize = standardize
 
@@ -191,6 +207,7 @@ class Posthoc(nn.Module):
         self.transformations = nn.ModuleList(layers)
 
     def forward(self, x: torch.Tensor) -> np.ndarray:
+        """Transform, subsample, and optionally standardize feature columns."""
         if self.n_posthoc > 0:
             out = []
             for t in self.transformations:
@@ -202,7 +219,7 @@ class Posthoc(nn.Module):
                 x = torch.cat([x, z], dim=-1)
                 idx = torch.randperm(x.shape[-1])[: self.n_features]
                 x = x[..., idx]
-        x = x.detach().numpy()
+        x = x.detach().cpu().numpy()
         if self.standardize:
             x = standardize(x, axis=0)
         return x

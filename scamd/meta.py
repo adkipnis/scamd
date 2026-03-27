@@ -27,6 +27,7 @@ class Standardizer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Cache first-batch statistics and reuse them afterwards.
         if self.mean is None or self.std is None:
+            assert len(x) > 1, 'first dim must be > 1'
             self.mean = x.mean(dim=0, keepdim=True)
             self.std = x.std(dim=0, keepdim=True) + 1e-6
         return (x - self.mean) / self.std

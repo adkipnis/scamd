@@ -9,7 +9,7 @@ from scamd import Generator, generate_dataset
 from scamd.causes import CauseSampler
 from scamd.posthoc import Posthoc
 from scamd.scm import SCM
-from scamd.utils import getRng, hasConstantColumns, logUniform, setSeed
+from scamd.utils import hasConstantColumns, logUniform, setSeed
 
 
 class TestSCMSmoke(unittest.TestCase):
@@ -105,7 +105,7 @@ class TestSCMSmoke(unittest.TestCase):
 
     def test_log_uniform_rng_first_scalar_and_vector(self) -> None:
         setSeed(7)
-        rng = getRng()
+        rng = np.random.default_rng(7)
         scalar = logUniform(rng, 0.1, 1.0)
         vec = logUniform(rng, 2.0, 20.0, size=(5,), round=True)
         self.assertTrue(np.isscalar(scalar))
@@ -162,6 +162,21 @@ class TestSCMSmoke(unittest.TestCase):
         self.assertEqual(x.shape, (72, 6))
         self.assertTrue(np.isfinite(x).all())
 
+    def test_generate_dataset_contiguous_passthrough(self) -> None:
+        setSeed(27)
+        x = generate_dataset(
+            n_samples=64,
+            n_features=6,
+            n_causes=9,
+            n_layers=4,
+            n_hidden=20,
+            blockwise=False,
+            contiguous=True,
+            preset='smooth_stable',
+        )
+        self.assertEqual(x.shape, (64, 6))
+        self.assertTrue(np.isfinite(x).all())
+
     def test_generator_api_samples_data_and_causes(self) -> None:
         setSeed(25)
         gen = Generator(
@@ -200,6 +215,7 @@ class TestSCMSmoke(unittest.TestCase):
             n_layers=4,
             n_hidden=20,
             blockwise=False,
+            contiguous=True,
             preset='smooth_stable',
             fixed=False,
             p_posthoc=0.5,

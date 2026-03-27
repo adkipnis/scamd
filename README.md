@@ -19,6 +19,7 @@ Generate realistic synthetic tabular datasets with using structural causal model
 
 ```bash
 uv sync
+uv pip install . -e
 ```
 
 Python `>=3.12` is required.

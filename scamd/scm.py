@@ -5,11 +5,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from .causes import CauseSampler
-from .posthoc import getPosthocLayers
-from .utils import standardize, checkConstant, getRng
+from scamd.causes import CauseSampler
+from scamd.utils import hasConstantColumns
 
-phl = getPosthocLayers()
 
 
 class NoiseLayer(nn.Module):
@@ -26,46 +24,40 @@ class NoiseLayer(nn.Module):
         return x + noise
 
 
-def sanityCheck(x: torch.Tensor) -> bool:
-    """Check that no feature column is constant across samples."""
-    x_np = x.detach().cpu().numpy()
-    okay = not checkConstant(x_np).any()
-    return okay
-
-
 class SCM(nn.Module):
     """Sample synthetic features using an MLP-based structural causal model."""
 
     def __init__(
         self,
-        # data dims
-        n_samples: int,
         n_features: int,
+
         # causes
-        n_causes: int = 10,  # number of units in initial layer
+        n_causes: int = 10,  # units in initial layer
         cause_dist: str = 'uniform',  # [mixed, normal, uniform]
-        fixed: bool = False,  # fixed moments of causes
+        fixed_moments: bool = False,  # fixed moments of causes
+
         # MLP architecture
         n_layers: int = 8,
-        n_hidden: int = 32,
-        activation: Callable = nn.Tanh,
-        # weight initialization and feature extraction
+        n_hidden: int = 32, # units per layer
+        activation: Callable = nn.ReLU,
         sigma_w: float = 1.0,  # for weight initialization
+
+        # feature extraction
         contiguous: bool = False,  # sample adjacent features
         blockwise: bool = True,  # use blockwise dropout
         p_dropout: float = 0.1,  # dropout probability for weights
-        # Gaussian noise
+
+       # Gaussian noise
         sigma_e: float = 0.01,  # for additive noise
         vary_sigma_e: bool = True,  # allow noise to vary per units
-        **kwargs,
+
+        # misc
+        max_retries: int = 8,
+        rng: np.random.Generator | None = None
     ):
         """Initialize SCM sampling modules and random MLP layers."""
         super().__init__()
-        self.n_samples = n_samples
         self.n_features = n_features
-        self.n_causes = n_causes
-        self.cause_dist = cause_dist
-        self.fixed = fixed
         self.n_layers = n_layers
         self.n_hidden = n_hidden
         self.activation = activation
@@ -75,28 +67,26 @@ class SCM(nn.Module):
         self.p_dropout = p_dropout
         self.sigma_e = sigma_e
         self.vary_sigma_e = vary_sigma_e
-        self.max_retries = int(kwargs.get('max_retries', 64))
+        self.max_retries = max_retries
+        if rng is None:
+            rng = np.random.default_rng(0)
+        self.rng = rng
 
         # make sure to have enough hidden units
         self.n_hidden = max(self.n_hidden, 2 * self.n_features)
 
         # init sampler for root nodes
-        self.cs = CauseSampler(
-            self.n_samples,
-            self.n_causes,
-            dist=self.cause_dist,
-            fixed=self.fixed,
-        )
+        self.cs = CauseSampler(n_causes, dist=cause_dist, fixed_moments=fixed_moments, rng=self.rng)
 
         # build layers
-        layers = [self._buildLayer(self.n_causes)]
+        layers = [self._buildLayer(n_causes)]
         for _ in range(self.n_layers - 1):
             layers += [self._buildLayer()]
         self.layers = nn.Sequential(*layers)
 
         # initialize weights
         with torch.no_grad():
-            self._initLayers()
+            self._initAllLayers()
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
         """Create one affine-noise-activation block."""
@@ -110,11 +100,11 @@ class SCM(nn.Module):
         noise_layer = NoiseLayer(sigma_e)
         return nn.Sequential(affine_layer, noise_layer, self.activation())
 
-    def _initLayers(self):
+    def _initAllLayers(self):
         """Initialize all linear weight matrices in the network."""
         # init linear weights either with regular droput or blockwise dropout
         for i, block in enumerate(self.layers):
-            param = block[0].weight
+            param = block[0].weight # type: ignore
             if self.blockwise:
                 self._initLayerBlockDropout(param)
             else:
@@ -135,119 +125,70 @@ class SCM(nn.Module):
         # blockwise weight dropout for higher dependency between features
         nn.init.zeros_(param)
         max_blocks = np.ceil(np.sqrt(min(param.shape)))
-        n_blocks = getRng().integers(1, max_blocks)
+        n_blocks = self.rng.integers(1, max_blocks)
         block_size = [dim // n_blocks for dim in param.shape]
         units_per_block = block_size[0] * block_size[1]
         keep_prob = (n_blocks * units_per_block) / param.numel()
-        sigma_w = self.sigma_w / (keep_prob**0.5)
+        sigma_w = float(self.sigma_w / (keep_prob**0.5))
         for block in range(n_blocks):
             block_slice = tuple(
-                slice(dim * block, dim * (block + 1)) for dim in block_size
+                slice(dim * block, dim * (block + 1))
+                for dim in block_size
             )
             nn.init.normal_(param[block_slice], std=sigma_w)
 
-    def sample(self) -> torch.Tensor:
+    def _randomIndices(self, valid: torch.Tensor) -> torch.Tensor:
+        valid_idx = np.flatnonzero(valid)
+        idx = self.rng.choice(valid_idx, size=self.n_features, replace=False)
+        return torch.from_numpy(idx)
+
+    def _contiguousIndices(self, n_units: int, valid: torch.Tensor):
+        max_start = n_units - self.n_features + 1
+        start_points = self.rng.permutation(max_start)
+
+        # try out starting points
+        for start in start_points[: min(max_start, 16)]:
+            window = np.arange(start, start + self.n_features)
+            if valid[window].all():
+                return torch.from_numpy(window)
+
+        # emergency exit
+        return self._randomIndices(valid)
+
+    @torch.inference_mode()
+    def sample(self, n_samples: int) -> torch.Tensor:
         """Generate one synthetic feature matrix passing sanity checks."""
         for attempt in range(self.max_retries):
             if attempt > 0:
-                with torch.no_grad():
-                    self._initLayers()
-            causes = self.cs.sample()  # (seq_len, num_causes)
+                self._initAllLayers()
+            causes = self.cs.sample(n_samples)  # (n_samples, n_causes)
 
             # pass through each mlp layer
             outputs = [causes]
             for layer in self.layers:
                 h = layer(outputs[-1])
-                h = torch.where(h.isnan() | h.abs().isinf(), 0, h)
+                h = torch.where(torch.isfinite(h), h, 0)
                 outputs.append(h)
             outputs = outputs[1:]  # remove causes
 
             # extract features
-            outputs = torch.cat(outputs, dim=-1)  # (n, units)
-            outputs_np = outputs.detach().cpu().numpy()
-            valid = ~checkConstant(outputs_np, axis=0)
-            valid_indices = np.flatnonzero(valid)
-            if valid_indices.size < self.n_features:
+            outputs = torch.cat(outputs, dim=-1)  # (n, n_units)
+            valid = ~hasConstantColumns(outputs)
+            if valid.sum() < self.n_features:
                 continue
 
+            # choose indices
             n_units = outputs.shape[-1]
-            indices: torch.Tensor
             if self.contiguous:
-                max_start = n_units - self.n_features + 1
-                starts = getRng().permutation(max_start)
-                chosen = None
-                for start in starts[: min(max_start, 32)]:
-                    window = np.arange(start, start + self.n_features)
-                    if valid[window].all():
-                        chosen = window
-                        break
-                if chosen is None:
-                    chosen = getRng().choice(
-                        valid_indices,
-                        size=self.n_features,
-                        replace=False,
-                    )
-                indices = torch.as_tensor(chosen, device=outputs.device)
+                idx = self._contiguousIndices(n_units, valid)
             else:
-                chosen = getRng().choice(
-                    valid_indices,
-                    size=self.n_features,
-                    replace=False,
-                )
-                indices = torch.as_tensor(chosen, device=outputs.device)
+                idx = self._randomIndices(valid)
+            x = outputs[:, idx]
 
-            x = outputs[:, indices]
-            if sanityCheck(x):
+            # sanity check
+            if torch.isfinite(x).all() and not hasConstantColumns(x).any():
                 return x
+
         raise RuntimeError(
             f'SCM.sample failed to produce a valid sample in {self.max_retries} attempts'
         )
-
-
-class Posthoc(nn.Module):
-    """Apply optional post-hoc feature transformations to SCM outputs."""
-
-    def __init__(
-        self,
-        n_features: int,
-        p_posthoc: float = 0.2,  # probability of posthoc transformation
-        standardize: bool = True,
-        **kwargs,
-    ):
-        """Initialize a random set of post-hoc transformation layers."""
-        super().__init__()
-        self.standardize = standardize
-
-        # posthoc transformations
-        self.n_features = n_features
-        self.n_posthoc = getRng().binomial(n_features, p_posthoc)
-        layers = []
-        for _ in range(self.n_posthoc):
-            cfg = {
-                'n_in': n_features,
-                'n_out': getRng().integers(1, 3),
-                'standardize': True,
-                # TODO levels, sigma
-            }
-            layer = getRng().choice(phl)
-
-            layers.append(layer(**cfg))
-        self.transformations = nn.ModuleList(layers)
-
-    def forward(self, x: torch.Tensor) -> np.ndarray:
-        """Transform, subsample, and optionally standardize feature columns."""
-        if self.n_posthoc > 0:
-            out = []
-            for t in self.transformations:
-                h = t(x)
-                if sanityCheck(h):
-                    out.append(h)
-            if out:
-                z = torch.cat(out, dim=-1)
-                x = torch.cat([x, z], dim=-1)
-                idx = torch.randperm(x.shape[-1])[: self.n_features]
-                x = x[..., idx]
-        x = x.detach().cpu().numpy()
-        if self.standardize:
-            x = standardize(x, axis=0)
-        return x

@@ -108,7 +108,7 @@ def plot_dataset(
         xlabel = g.axes[-1, i].get_xlabel()
         g.fig.text(
             ax.get_position().x0 + ax.get_position().width / 2,
-            ax.get_position().y1 + 0.02,
+            ax.get_position().y1,
             xlabel,
             ha='center',
             va='bottom',

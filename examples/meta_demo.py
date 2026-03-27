@@ -8,7 +8,12 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 
-from scamd.meta import RandomChoice, RandomScale, RandomScaleFactory, Standardizer
+from scamd.meta import (
+    RandomChoice,
+    RandomScale,
+    RandomScaleFactory,
+    Standardizer,
+)
 from scamd.utils import setSeed
 
 
@@ -33,24 +38,24 @@ def plot_meta_layers() -> None:
     axes = list(axes.flat)
 
     axes[0].plot(x_np, y_standardized[:, 0].numpy())
-    axes[0].set_title("Standardizer")
+    axes[0].set_title('Standardizer')
 
     axes[1].plot(x_np, y_scaled[:, 0].numpy())
-    axes[1].set_title("RandomScale")
+    axes[1].set_title('RandomScale')
 
     axes[2].plot(x_np, y_scaled_tanh[:, 0].detach().numpy())
-    axes[2].set_title("RandomScaleFactory(nn.Tanh)")
+    axes[2].set_title('RandomScaleFactory(nn.Tanh)')
 
     axes[3].plot(x_np, y_choice[:, 0].detach().numpy())
-    axes[3].set_title("RandomChoice(ID, ReLU, Tanh)")
+    axes[3].set_title('RandomChoice(ID, ReLU, Tanh)')
 
     for ax in axes:
         ax.grid(alpha=0.2)
 
-    plt.suptitle("Meta layer transforms", size=16)
+    plt.suptitle('Meta layer transforms', size=16)
     fig.tight_layout()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     setSeed(3)
     plot_meta_layers()

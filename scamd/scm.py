@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from scamd.causes import CauseSampler
 from scamd.utils import hasConstantColumns, sanityCheck
 
 
@@ -31,12 +30,11 @@ class SCM(nn.Module):
         self,
         n_features: int,
 
-        # causes
-        n_causes: int = 10,  # units in initial layer
-        cause_dist: str = 'uniform',  # [mixed, normal, uniform]
-        fixed_moments: bool = False,  # fixed moments of causes
+        # cause_dist: str = 'uniform',  # [mixed, normal, uniform]
+        # fixed_moments: bool = False,  # fixed moments of causes
 
         # MLP architecture
+        n_causes: int = 10,  # units in initial layer
         n_layers: int = 8,
         n_hidden: int = 32, # units per layer
         activation: Callable = nn.ReLU,
@@ -52,7 +50,6 @@ class SCM(nn.Module):
         vary_sigma_e: bool = True,  # allow noise to vary per units
 
         # misc
-        max_retries: int = 8,
         rng: np.random.Generator | None = None
     ):
         """Initialize SCM sampling modules and random MLP layers."""
@@ -67,7 +64,6 @@ class SCM(nn.Module):
         self.p_dropout = p_dropout
         self.sigma_e = sigma_e
         self.vary_sigma_e = vary_sigma_e
-        self.max_retries = max_retries
         if rng is None:
             rng = np.random.default_rng(0)
         self.rng = rng
@@ -75,18 +71,14 @@ class SCM(nn.Module):
         # make sure to have enough hidden units
         self.n_hidden = max(self.n_hidden, 2 * self.n_features)
 
-        # init sampler for root nodes
-        self.cs = CauseSampler(n_causes, dist=cause_dist, fixed_moments=fixed_moments, rng=self.rng)
+        # # init sampler for root nodes
+        # self.cs = CauseSampler(n_causes, dist=cause_dist, fixed_moments=fixed_moments, rng=self.rng)
 
         # build layers
         layers = [self._buildLayer(n_causes)]
         for _ in range(self.n_layers - 1):
             layers += [self._buildLayer()]
         self.layers = nn.Sequential(*layers)
-
-        # initialize weights
-        with torch.no_grad():
-            self._initAllLayers()
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
         """Create one affine-noise-activation block."""
@@ -155,40 +147,32 @@ class SCM(nn.Module):
         # emergency exit
         return self._randomIndices(valid)
 
-    @torch.inference_mode()
-    def sample(self, n_samples: int) -> torch.Tensor:
+    def forward(self, causes: torch.Tensor) -> torch.Tensor | None:
         """Generate one synthetic feature matrix passing sanity checks."""
-        for attempt in range(self.max_retries):
-            if attempt > 0:
-                self._initAllLayers()
-            causes = self.cs.sample(n_samples)  # (n_samples, n_causes)
+        self._initAllLayers()
 
-            # pass through each mlp layer
-            outputs = [causes]
-            for layer in self.layers:
-                h = layer(outputs[-1])
-                h = torch.where(torch.isfinite(h), h, 0)
-                outputs.append(h)
-            outputs = outputs[1:]  # remove causes
+        # pass through each mlp layer
+        outputs = [causes]
+        for layer in self.layers:
+            h = layer(outputs[-1])
+            h = torch.where(torch.isfinite(h), h, 0)
+            outputs.append(h)
+        outputs = outputs[1:]  # remove causes
 
-            # extract features
-            outputs = torch.cat(outputs, dim=-1)  # (n, n_units)
-            valid = ~hasConstantColumns(outputs)
-            if valid.sum() < self.n_features:
-                continue
+        # extract features
+        outputs = torch.cat(outputs, dim=-1)  # (n, n_units)
+        valid = ~hasConstantColumns(outputs)
+        if valid.sum() < self.n_features:
+            return None
 
-            # choose indices
-            n_units = outputs.shape[-1]
-            if self.contiguous:
-                idx = self._contiguousIndices(n_units, valid)
-            else:
-                idx = self._randomIndices(valid)
-            x = outputs[:, idx]
+        # choose indices
+        n_units = outputs.shape[-1]
+        if self.contiguous:
+            idx = self._contiguousIndices(n_units, valid)
+        else:
+            idx = self._randomIndices(valid)
+        x = outputs[:, idx]
 
-            # sanity check
-            if sanityCheck(x):
-                return x
-
-        raise RuntimeError(
-            f'SCM.sample failed to produce a valid sample in {self.max_retries} attempts'
-        )
+        # sanity check
+        if sanityCheck(x):
+            return x

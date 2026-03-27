@@ -1,4 +1,4 @@
-# scm-datasets
+# Structural CAusal Model Datsets
 
 Generate realistic synthetic tabular datasets with a structural causal model (SCM).
 

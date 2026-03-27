@@ -4,10 +4,6 @@ import random
 import numpy as np
 import torch
 
-
-_RNG = np.random.default_rng()
-
-
 # --- sampling
 def setSeed(s: int) -> None:
     global _RNG
@@ -15,12 +11,6 @@ def setSeed(s: int) -> None:
     np.random.seed(s)
     torch.manual_seed(s)
     torch.cuda.manual_seed_all(s)
-    _RNG = np.random.default_rng(s)
-
-
-def getRng() -> np.random.Generator:
-    return _RNG
-
 
 def logUniform(
     rng: np.random.Generator,

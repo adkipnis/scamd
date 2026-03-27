@@ -9,7 +9,8 @@ from .presets import (
     get_dataset_preset,
     get_pool_preset,
 )
-from .scm import SCM, Posthoc
+from .scm import SCM
+from .posthoc import Posthoc
 
 __all__ = [
     'SCM',

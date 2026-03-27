@@ -44,7 +44,7 @@ def _sample_pipeline(
         n_hidden=n_hidden,
         blockwise=blockwise,
         preset=preset,
-        p_posthoc=0.0,
+        p_posthoc=0.2,
         cause_dist=cause_dist,
         fixed=fixed,
         rng=rng,
@@ -134,7 +134,7 @@ def plot_pairgrid_example() -> None:
     base_cfg = DATASET_PRESETS['balanced_realistic']
     cfg = dict(
         n_samples=1200,
-        n_features=8,
+        n_features=5,
         n_causes=12,
         n_layers=8,
         n_hidden=64,
@@ -167,7 +167,7 @@ def plot_pairgrid_example() -> None:
 
 
 if __name__ == '__main__':
-    setSeed(7)
+    setSeed(0)
     plot_scm_presets()
     plot_pairgrid_example()
     plt.show()

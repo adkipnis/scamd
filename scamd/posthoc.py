@@ -203,7 +203,6 @@ class Posthoc(nn.Module):
             layers.append(layer(**cfg))
         self.transformations = nn.ModuleList(layers)
 
-    @torch.inference_mode()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.n_posthoc > 0:
             out = []

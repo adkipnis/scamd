@@ -45,29 +45,32 @@ class FractionalKernel:  # scale-free fractional kernel
         return freqs, factor
 
 
+KERNELS = {
+    'matern': MaternKernel,
+    'se': SEKernel,
+    'fractional': FractionalKernel,
+}
+
+
 class GP(nn.Module):
+
     # sample from a GP with a random kernel [SE, Matern, Fractal]
-    def __init__(self, k: int = 512, gp_type: Literal['se', 'matern', 'fractional'] = 'fractional'):
+    def __init__(
+        self,
+        k: int = 512,
+        gp_type: Literal['se', 'matern', 'fractional'] | None = None,
+    ):
         super().__init__()
         self.standardizer = Standardizer()
-        self.kernels = {
-            'matern': MaternKernel,
-            'se': SEKernel,
-            'fractional': FractionalKernel,
-        }
-
         # choose kernel
-        if gp_type:
-            assert (
-                gp_type in self.kernels
-            ), f'Kernel not found in {self.kernels.keys()}'
-        else:
+        if gp_type is None:
             gp_type = getRng().choice(
-                list(self.kernels.keys()),
+                list(KERNELS.keys()),
                 p=[0.5, 0.2, 0.3],
-                # p=[0.0, 1.0, 0.0]
             )
-        self.kernel = self.kernels[gp_type]()
+        elif gp_type not in KERNELS:
+            raise ValueError(f'Kernel not found in {list(KERNELS.keys())}')
+        self.kernel = KERNELS[gp_type]()   # type: ignore
 
         # setup parameters
         ell = logUniform(getRng(), 0.1, 16.0)

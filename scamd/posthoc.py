@@ -203,6 +203,52 @@ class CategoricalBlock(nn.Module):
         return torch.cat([c(x) for c in self.cats], dim=-1)
 
 
+class OrdinalBlock(nn.Module):
+    """Generate k correlated ordinal features via shared-direction thresholding.
+
+    Samples k projection directions clustered around a shared base direction
+    (controlled by ``noise_scale``).  Each direction is passed through
+    independently sampled thresholds, producing ordinal columns (integer values
+    0 … L-1) that are strongly rank-correlated with each other because they
+    share the same underlying latent axis — matching the Spearman > Pearson
+    pattern common in real datasets with multiple ordinal predictors.
+
+    Parameters
+    ----------
+    n_in:
+        Number of input features.
+    n_out:
+        Number of ordinal output columns.
+    rng:
+        NumPy random generator.
+    """
+
+    def __init__(self, n_in: int, n_out: int, rng: np.random.Generator):
+        super().__init__()
+        self.n_out = n_out
+
+        # shared base direction + per-feature perturbations
+        base = rng.standard_normal(n_in)
+        base /= np.linalg.norm(base) + 1e-8
+        noise_scale = float(rng.uniform(0.05, 0.5))
+        dirs = base[None, :] + rng.standard_normal((n_out, n_in)) * noise_scale
+        norms = np.linalg.norm(dirs, axis=1, keepdims=True)
+        dirs /= norms + 1e-8
+        self.register_buffer('W', torch.from_numpy(dirs).float())  # (n_out, n_in)
+
+        # independent thresholds per ordinal column, same number of levels
+        n_levels = int(rng.integers(3, 8))
+        tau = rng.standard_normal((n_out, n_levels - 1))
+        tau.sort(axis=1)
+        self.register_buffer('tau', torch.from_numpy(tau).float())  # (n_out, L-1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = x @ self.W.T                                    # (n, n_out)
+        # count how many thresholds each projection exceeds
+        ordinal = (z.unsqueeze(-1) > self.tau.unsqueeze(0)).float().sum(-1)
+        return ordinal                                       # (n, n_out)
+
+
 class Poisson(Stochastic):
     """Sample count-valued outputs using a Poisson likelihood."""
 
@@ -322,14 +368,13 @@ class Posthoc(nn.Module):
         layers = []
 
         for _ in range(self.n_posthoc):
-            # With 40% probability use a CategoricalBlock, which generates
-            # dummies for multiple *independent* categorical variables in one
-            # shot.  This covers the common real-dataset pattern of several
-            # factor predictors each contributing their own mutually-exclusive
-            # dummy group (Type B design matrices), while also naturally
-            # producing the single-factor all-dummy pattern (Type A) when
-            # n_cats=1 with large n_levels.
-            if self.rng.random() < 0.40:
+            # Route to a block-level transform (categorical or ordinal) 60% of
+            # the time, and to an individual layer 40% of the time.
+            # - CategoricalBlock: multiple independent dummy-coded categoricals
+            # - OrdinalBlock: multiple correlated ordinal features via shared
+            #   projection directions (targets Spearman > Pearson gap)
+            r = self.rng.random()
+            if r < 0.30:
                 n_cats = int(self.rng.integers(1, max(3, n_features // 2) + 1))
                 n_levels = [
                     int(
@@ -344,6 +389,9 @@ class Posthoc(nn.Module):
                         n_in=n_features, n_levels=n_levels, standardize=True
                     )
                 )
+            elif r < 0.60:
+                n_out = int(self.rng.integers(2, max(4, n_features // 2) + 1))
+                layers.append(OrdinalBlock(n_in=n_features, n_out=n_out, rng=self.rng))
             else:
                 # n_out: number of output columns for this transform.
                 # Upper bound is inclusive of n_features so a single Categorical

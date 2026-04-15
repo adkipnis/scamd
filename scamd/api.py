@@ -7,14 +7,15 @@ import numpy as np
 import torch
 
 from .causes import CauseSampler
+from .dag import DAGSCM
 from .pool import getActivations
-from .presets import get_dataset_preset, get_pool_preset
+from .presets import getDatasetPreset, getPoolPreset
 from .posthoc import Posthoc
 from .scm import SCM
 
 
 class Generator:
-    """Bundle CauseSampler, SCM, and Posthoc into one generation API."""
+    """Bundle CauseSampler, SCM/DAGSCM, and Posthoc into one generation API."""
 
     def __init__(
         self,

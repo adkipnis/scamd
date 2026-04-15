@@ -90,10 +90,3 @@ class CauseSampler(nn.Module):
     def sample(self, n_samples: int) -> torch.Tensor:
         shape = (n_samples, self.n_causes)
         return self.dist(shape)
-
-
-if __name__ == '__main__':
-    n = 100
-    d = 3
-    cs = CauseSampler(n_causes=8, dist='mixed')
-    x = cs.sample(n)

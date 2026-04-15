@@ -64,7 +64,7 @@ PRESET_LABELS: dict[str, str] = {
 }
 
 
-def get_pool_preset(name: str) -> dict[str, Any]:
+def getPoolPreset(name: str) -> dict[str, Any]:
     """Return a deep copy of one activation-pool preset."""
     if name not in POOL_PRESETS:
         options = ', '.join(sorted(POOL_PRESETS))
@@ -74,7 +74,7 @@ def get_pool_preset(name: str) -> dict[str, Any]:
     return deepcopy(POOL_PRESETS[name])
 
 
-def get_dataset_preset(name: str) -> dict[str, Any]:
+def getDatasetPreset(name: str) -> dict[str, Any]:
     """Return a deep copy of one dataset-generation preset."""
     if name not in DATASET_PRESETS:
         options = ', '.join(sorted(DATASET_PRESETS))

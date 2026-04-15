@@ -11,10 +11,14 @@ class CauseSampler(nn.Module):
         n_causes: int,
         dist: str = 'mixed',  # [mixed, normal, uniform]
         fixed_moments: bool = False,  # random parameters for dist
+        p_corr_causes: float = 0.5,  # probability of applying a Gaussian copula
+        max_corr_strength: float = 0.9,  # upper bound for copula shrinkage weight
         rng: np.random.Generator | None = None,
     ) -> None:
         super().__init__()
         self.n_causes = n_causes
+        self.p_corr_causes = p_corr_causes
+        self.max_corr_strength = max_corr_strength
 
         # set rng
         if rng is None:
@@ -142,6 +146,64 @@ class CauseSampler(nn.Module):
             x = mu + x * sigma
         return x
 
+    def _applyCopula(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply a Gaussian copula to induce inter-cause correlations.
+
+        Preserves each column's marginal distribution exactly while coupling
+        the columns through a randomly sampled correlation matrix R.  R is
+        constructed as a random Wishart-like matrix shrunk toward the identity
+        by a factor ``rho ~ Uniform(0, max_corr_strength)``.
+        """
+        n, k = x.shape
+        if n < 10:
+            return x
+
+        # sample a random correlation matrix shrunk toward identity
+        rho = float(self.rng.uniform(0.0, self.max_corr_strength))
+        A = torch.from_numpy(self.rng.standard_normal((k, k))).float()
+        M = A @ A.T
+        d_sqrt = M.diag().clamp(min=1e-8).sqrt()
+        R_raw = M / d_sqrt.unsqueeze(0) / d_sqrt.unsqueeze(1)
+        R = (1.0 - rho) * torch.eye(k) + rho * R_raw
+        # clip eigenvalues to ensure positive definiteness
+        eigvals, eigvecs = torch.linalg.eigh(R)
+        eigvals = eigvals.clamp(min=1e-6)
+        R = eigvecs @ torch.diag(eigvals) @ eigvecs.T
+        d_sqrt2 = R.diag().clamp(min=1e-8).sqrt()
+        R = R / d_sqrt2.unsqueeze(0) / d_sqrt2.unsqueeze(1)
+
+        try:
+            L = torch.linalg.cholesky(R)
+        except Exception:
+            return x
+
+        # empirical ranks → uniform (continuity-corrected)
+        ranks = x.argsort(dim=0).argsort(dim=0).float()
+        u = (ranks + 0.5) / n
+        u = u.clamp(1e-6, 1.0 - 1e-6)
+
+        # uniform → standard normal via inverse error function
+        z = torch.erfinv(2.0 * u - 1.0) * (2.0 ** 0.5)
+
+        # apply Cholesky factor to induce the target correlation
+        z_corr = z @ L.T
+
+        # standard normal → uniform via normal CDF
+        u_corr = 0.5 * (1.0 + torch.erf(z_corr / (2.0 ** 0.5)))
+        u_corr = u_corr.clamp(1e-6, 1.0 - 1e-6)
+
+        # uniform → original marginals via empirical quantile
+        x_sorted = x.sort(dim=0).values
+        idx = (u_corr * n).long().clamp(0, n - 1)
+        return x_sorted.gather(0, idx)
+
     def sample(self, n_samples: int) -> torch.Tensor:
         shape = (n_samples, self.n_causes)
-        return self.dist(shape)
+        x = self.dist(shape)
+        if (
+            self.p_corr_causes > 0
+            and self.n_causes >= 2
+            and self.rng.random() < self.p_corr_causes
+        ):
+            x = self._applyCopula(x)
+        return x

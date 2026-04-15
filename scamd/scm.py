@@ -44,6 +44,25 @@ class SharedNoiseLayer(nn.Module):
         return x
 
 
+class FactorLayer(nn.Module):
+    """Inject a low-rank factor structure to increase inter-feature correlation.
+
+    Samples ``n_factors`` shared latent factors z ~ N(0, I) per forward pass
+    and mixes them into the feature matrix via fixed random loadings W,
+    inducing a rank-``n_factors`` correlation block on top of the SCM output.
+    """
+
+    def __init__(self, n_features: int, n_factors: int, alpha: float):
+        super().__init__()
+        W = torch.randn(n_features, n_factors) / (n_factors ** 0.5)
+        self.register_buffer('W', W)
+        self.alpha = alpha
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = torch.randn(x.shape[0], self.W.shape[1], device=x.device)  # (n, k)
+        return x + self.alpha * (z @ self.W.T)                          # (n, d)
+
+
 class SCM(nn.Module):
     """Sample synthetic features using an MLP-based structural causal model."""
 

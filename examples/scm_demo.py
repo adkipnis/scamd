@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from scamd import Generator
-from scamd.plotting import plot_dataset
+from scamd.plotting import plotDataset
 from scamd.presets import DATASET_PRESETS, PRESET_LABELS
 from scamd.posthoc import Posthoc
 from scamd.utils import setSeed
@@ -37,7 +37,7 @@ def _sample_pipeline(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Sample one dataset before and after Posthoc transformation."""
     rng = np.random.default_rng(0)
-    gen = Generator.from_preset(
+    gen = Generator.fromPreset(
         n_features=n_features,
         n_causes=n_causes,
         n_layers=n_layers,
@@ -152,13 +152,13 @@ def plot_pairgrid_example() -> None:
     base_df = pd.DataFrame(base, columns=cols)
     post_df = pd.DataFrame(transformed, columns=cols)
 
-    plot_dataset(
+    plotDataset(
         base_df,
         color='#2f6f95',
         title='SCM only (Balanced Realistic)',
         kde=True,
     )
-    plot_dataset(
+    plotDataset(
         post_df,
         color='#3b7f4a',
         title='SCM + Posthoc (Balanced Realistic)',

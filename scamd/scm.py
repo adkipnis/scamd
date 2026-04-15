@@ -22,6 +22,28 @@ class NoiseLayer(nn.Module):
         return x + noise
 
 
+class SharedNoiseLayer(nn.Module):
+    """Add a shared latent noise component to a random subset of features.
+
+    One noise vector z ~ N(0, 1) is drawn per sample and mixed into
+    ``feature_indices`` with weight ``alpha``, injecting residual correlation
+    that is not explained by the causal MLP structure.
+    """
+
+    def __init__(self, feature_indices: torch.Tensor, alpha: float):
+        super().__init__()
+        self.register_buffer('feature_indices', feature_indices)
+        self.alpha = alpha
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        n = x.shape[0]
+        z = torch.randn(n, device=x.device)          # (n,)
+        noise = z.unsqueeze(-1) * self.alpha          # (n, 1) broadcast
+        x = x.clone()
+        x[:, self.feature_indices] = x[:, self.feature_indices] + noise
+        return x
+
+
 class SCM(nn.Module):
     """Sample synthetic features using an MLP-based structural causal model."""
 
@@ -40,6 +62,12 @@ class SCM(nn.Module):
         # Gaussian noise
         sigma_e: float = 0.01,  # for additive noise
         vary_sigma_e: bool = True,  # allow noise to vary per units
+        # noise calibration
+        calibrate_noise: bool = True,  # scale sigma_e to signal IQR
+        calibration_frac: float = 0.1,  # noise = calibration_frac * IQR
+        calibration_n: int = 256,  # pilot batch size for calibration
+        # shared noise groups
+        p_shared_noise: float = 0.5,  # probability of adding any shared noise
         # misc
         rng: np.random.Generator | None = None,
     ):
@@ -55,6 +83,10 @@ class SCM(nn.Module):
         self.p_dropout = p_dropout
         self.sigma_e = sigma_e
         self.vary_sigma_e = vary_sigma_e
+        self.calibrate_noise = calibrate_noise
+        self.calibration_frac = calibration_frac
+        self.calibration_n = calibration_n
+        self.p_shared_noise = p_shared_noise
         if rng is None:
             rng = np.random.default_rng(0)
         self.rng = rng
@@ -67,6 +99,25 @@ class SCM(nn.Module):
         for _ in range(self.n_layers - 1):
             layers += [self._buildLayer()]
         self.layers = nn.Sequential(*layers)
+
+        # build shared noise layers (applied after feature extraction)
+        self.shared_noise_layers = self._buildSharedNoiseLayers()
+
+    def _buildSharedNoiseLayers(self) -> nn.ModuleList:
+        """Create 0–3 shared noise components over random feature subsets."""
+        layers = []
+        if self.p_shared_noise > 0 and self.rng.random() < self.p_shared_noise:
+            n_groups = int(self.rng.integers(1, 4))
+            for _ in range(n_groups):
+                group_size = int(self.rng.integers(2, max(3, self.n_features)))
+                indices = torch.from_numpy(
+                    self.rng.choice(
+                        self.n_features, size=group_size, replace=False
+                    )
+                )
+                alpha = float(self.rng.uniform(0.05, 0.4))
+                layers.append(SharedNoiseLayer(indices, alpha))
+        return nn.ModuleList(layers)
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
         """Create one affine-noise-activation block."""
@@ -116,6 +167,27 @@ class SCM(nn.Module):
             )
             nn.init.normal_(param[block_slice], std=sigma_w)
 
+    def _calibrateNoise(self, causes: torch.Tensor) -> None:
+        """Scale each NoiseLayer's sigma so noise ≈ calibration_frac * signal IQR."""
+        # temporarily zero out noise
+        noise_layers = [block[1] for block in self.layers]
+        for nl in noise_layers:
+            nl.sigma = (
+                torch.zeros_like(nl.sigma)
+                if isinstance(nl.sigma, torch.Tensor)
+                else 0.0
+            )
+
+        with torch.no_grad():
+            h = causes
+            for i, layer in enumerate(self.layers):
+                h = layer(h)
+                h = torch.where(torch.isfinite(h), h, torch.zeros_like(h))
+                q75 = torch.quantile(h, 0.75, dim=0)
+                q25 = torch.quantile(h, 0.25, dim=0)
+                iqr = (q75 - q25).clamp(min=1e-6)
+                noise_layers[i].sigma = (self.calibration_frac * iqr).detach()
+
     def _randomIndices(self, valid: torch.Tensor) -> torch.Tensor:
         valid_idx = np.flatnonzero(valid)
         idx = self.rng.choice(valid_idx, size=self.n_features, replace=False)
@@ -138,6 +210,18 @@ class SCM(nn.Module):
         """Generate one synthetic feature matrix passing sanity checks."""
         self._initAllLayers()
 
+        # calibrate noise scales on first forward pass
+        if self.calibrate_noise and not getattr(
+            self, '_noise_calibrated', False
+        ):
+            pilot = (
+                causes[: self.calibration_n]
+                if causes.shape[0] >= self.calibration_n
+                else causes
+            )
+            self._calibrateNoise(pilot)
+            self._noise_calibrated = True
+
         # pass through each mlp layer
         outputs = [causes]
         for layer in self.layers:
@@ -159,6 +243,10 @@ class SCM(nn.Module):
         else:
             idx = self._randomIndices(valid)
         x = outputs[:, idx]
+
+        # apply shared noise groups
+        for snl in self.shared_noise_layers:
+            x = snl(x)
 
         # sanity check
         if sanityCheck(x):

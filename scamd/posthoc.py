@@ -24,11 +24,11 @@ class Base(nn.Module):
             self.standardizer = Standardizer()
         alpha = torch.ones(n_in)
         self.w = (
-            D.Dirichlet(alpha).sample((n_out, self.n_param)).permute(2, 0, 1)
+            D.Dirichlet(alpha).sample((n_out, self.nParam)).permute(2, 0, 1)
         )
 
     @property
-    def n_param(self) -> int:
+    def nParam(self) -> int:
         """Number of parameters per output channel."""
         return 1
 
@@ -182,10 +182,17 @@ class CategoricalBlock(nn.Module):
         sigma: float = 0.01,
     ):
         super().__init__()
-        self.cats = nn.ModuleList([
-            Categorical(n_in=n_in, n_out=k - 1, standardize=standardize, sigma=sigma)
-            for k in n_levels
-        ])
+        self.cats = nn.ModuleList(
+            [
+                Categorical(
+                    n_in=n_in,
+                    n_out=k - 1,
+                    standardize=standardize,
+                    sigma=sigma,
+                )
+                for k in n_levels
+            ]
+        )
 
     @property
     def n_out(self) -> int:
@@ -211,7 +218,7 @@ class NegativeBinomial(Stochastic):
     """Sample overdispersed counts via a Negative Binomial model."""
 
     @property
-    def n_param(self) -> int:
+    def nParam(self) -> int:
         """Use two parameters per output: logits and total count."""
         return 2
 

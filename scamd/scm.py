@@ -28,9 +28,6 @@ class SCM(nn.Module):
     def __init__(
         self,
         n_features: int,
-        # cause_dist: str = 'uniform',  # [mixed, normal, uniform]
-        # fixed_moments: bool = False,  # fixed moments of causes
-        # MLP architecture
         n_causes: int = 10,  # units in initial layer
         n_layers: int = 8,
         n_hidden: int = 32,  # units per layer
@@ -64,9 +61,6 @@ class SCM(nn.Module):
 
         # make sure to have enough hidden units
         self.n_hidden = max(self.n_hidden, 2 * self.n_features)
-
-        # # init sampler for root nodes
-        # self.cs = CauseSampler(n_causes, dist=cause_dist, fixed_moments=fixed_moments, rng=self.rng)
 
         # build layers
         layers = [self._buildLayer(n_causes)]
@@ -104,7 +98,7 @@ class SCM(nn.Module):
         p = min(p, 0.99)
         sigma_w = self.sigma_w / ((1 - p) ** 0.5)
         nn.init.normal_(param, std=sigma_w)
-        param *= torch.bernoulli(torch.full_like(param, 1 - p))
+        param.data *= torch.bernoulli(torch.full_like(param, 1 - p))
 
     def _initLayerBlockDropout(self, param: torch.Tensor) -> None:
         """Initialize weights in block-diagonal Gaussian submatrices."""

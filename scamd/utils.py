@@ -1,12 +1,13 @@
 """Randomness and array utilities for dataset generation."""
 
 import random
+
 import numpy as np
 import torch
 
-# --- sampling
+
 def setSeed(s: int) -> None:
-    global _RNG
+    """Seed Python, NumPy (legacy), and PyTorch global random states."""
     random.seed(s)
     np.random.seed(s)
     torch.manual_seed(s)
@@ -21,9 +22,9 @@ def logUniform(
     add: float = 0.0,
     round: bool = False,
 ) -> np.ndarray | np.floating | np.integer:
-    """sample from log uniform in [low, high) + {add} and optionally floor to integer"""
+    """Sample from log-uniform in [low, high) + add, optionally rounded to int."""
     assert 0 < low, 'lower bound must be positive'
-    assert low <= high, 'lower bound smaller than upper bound'
+    assert low <= high, 'lower bound must not exceed upper bound'
     log_low = np.log(low)
     log_high = np.log(high)
     out = rng.uniform(log_low, log_high, size)

@@ -23,6 +23,7 @@ class Generator:
         causes_config: dict[str, Any],
         scm_config: dict[str, Any],
         posthoc_config: dict[str, Any] | None = None,
+        use_dag: bool = False,
         rng: np.random.Generator | None = None,
         max_retries: int = 8,
     ) -> None:
@@ -30,6 +31,7 @@ class Generator:
         if max_retries < 0:
             raise ValueError('max_retries must be non-negative')
         self.max_retries = max_retries
+        self.use_dag = use_dag
 
         # configs
         causes_cfg = dict(causes_config)
@@ -54,7 +56,32 @@ class Generator:
 
         # main modules
         self.cause_sampler = CauseSampler(**causes_cfg)
-        self.scm = SCM(**scm_cfg)
+        if use_dag:
+            dag_cfg = {
+                k: v
+                for k, v in scm_cfg.items()
+                if k
+                in (
+                    'n_observed',
+                    'n_latent',
+                    'graph',
+                    'm',
+                    'activation',
+                    'sigma_w',
+                    'sigma_e',
+                    'calibrate_noise',
+                    'calibration_frac',
+                    'calibration_n',
+                    'rng',
+                )
+            }
+            dag_cfg.setdefault(
+                'n_observed',
+                scm_cfg.get('n_features', scm_cfg.get('n_observed', 10)),
+            )
+            self.scm = DAGSCM(**dag_cfg)
+        else:
+            self.scm = SCM(**scm_cfg)
         self.p_posthoc = float(posthoc_cfg.get('p_posthoc', 0.0))
         self.posthoc = Posthoc(**posthoc_cfg) if self.p_posthoc > 0 else None
 

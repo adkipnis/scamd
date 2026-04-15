@@ -10,7 +10,6 @@ from .utils import sanityCheck
 
 
 # --- deterministic post-hoc layers
-RNG = np.random.default_rng(0)
 
 
 class Base(nn.Module):
@@ -54,11 +53,18 @@ class MultiThreshold(Base):
     """Map each mixed feature to an ordinal level via multiple thresholds."""
 
     def __init__(
-        self, n_in: int, n_out: int, standardize: bool = False, levels: int = 3
+        self,
+        n_in: int,
+        n_out: int,
+        standardize: bool = False,
+        levels: int = 3,
+        rng: np.random.Generator | None = None,
     ):
         super().__init__(n_in, n_out, standardize)
-        self.levels = levels  # number of thresholds
-        self.tau = np.sort(RNG.normal(size=levels - 1))
+        self.levels = levels
+        if rng is None:
+            rng = np.random.default_rng(0)
+        self.tau = np.sort(rng.normal(size=levels - 1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Count how many sampled thresholds each value exceeds."""

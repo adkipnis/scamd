@@ -34,47 +34,16 @@ def logUniform(
     return out
 
 
-# --- sanity checkers
-
-
 def hasConstantColumns(x: torch.Tensor) -> torch.Tensor:
-    #  numeric (n, d) -> bool (d,)
+    """Return a bool mask of shape (d,) that is True for constant columns."""
     first_row = x[0]
-    col_is_constant = (x == first_row).all(dim=0)
-    return col_is_constant
+    return (x == first_row).all(dim=0)
 
 
 def sanityCheck(x: torch.Tensor) -> bool:
+    """Return False if x has any constant or non-finite columns."""
     if hasConstantColumns(x).any():
         return False
     if not torch.isfinite(x).any():
         return False
     return True
-
-
-# --- standardize
-def moments(
-    x: np.ndarray,
-    axis: int = 0,
-    exclude: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    mean = x.mean(axis, keepdims=True)
-    std = x.std(axis, keepdims=True)
-    if exclude is not None:
-        exclude = exclude.reshape(mean.shape)
-        mean[exclude] = 0
-        std[exclude] = 1
-    return mean, std
-
-
-def standardize(
-    x: np.ndarray,
-    axis: int = 0,
-    exclude_binary: bool = True,
-    eps: float = 1e-6,
-) -> np.ndarray:
-    exclude = checkBinary(x, axis=axis) if exclude_binary else None
-    mean, std = moments(x, axis, exclude=exclude)
-    bad = (~np.isfinite(std)) | (std < eps)
-    std = np.where(bad, 1.0, std)
-    return (x - mean) / std

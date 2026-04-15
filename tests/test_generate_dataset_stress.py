@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 from torch import nn
 
-from scamd import generate_dataset
+from scamd import generateDataset
 from scamd.utils import setSeed
 
 
@@ -54,7 +54,7 @@ class TestGenerateDatasetStress(unittest.TestCase):
             kwargs = _sample_generate_dataset_kwargs(rng)
             setSeed(int(rng.integers(0, 2**31 - 1)))
             try:
-                x = generate_dataset(**kwargs)
+                x = generateDataset(**kwargs)
                 if x.shape != (kwargs['n_samples'], kwargs['n_features']):
                     raise AssertionError(
                         f'unexpected shape: {x.shape}, expected '

@@ -25,6 +25,7 @@ class TestRngConsistency(unittest.TestCase):
         paths = [
             'scamd/basic.py',
             'scamd/causes.py',
+            'scamd/dag.py',
             'scamd/gp.py',
             'scamd/posthoc.py',
             'scamd/scm.py',

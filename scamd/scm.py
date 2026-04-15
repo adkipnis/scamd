@@ -87,6 +87,8 @@ class SCM(nn.Module):
         calibration_n: int = 256,  # pilot batch size for calibration
         # shared noise groups
         p_shared_noise: float = 0.5,  # probability of adding any shared noise
+        # low-rank factor injection
+        p_factor: float = 0.5,  # probability of adding a FactorLayer
         # misc
         rng: np.random.Generator | None = None,
     ):
@@ -106,6 +108,7 @@ class SCM(nn.Module):
         self.calibration_frac = calibration_frac
         self.calibration_n = calibration_n
         self.p_shared_noise = p_shared_noise
+        self.p_factor = p_factor
         if rng is None:
             rng = np.random.default_rng(0)
         self.rng = rng
@@ -121,6 +124,9 @@ class SCM(nn.Module):
 
         # build shared noise layers (applied after feature extraction)
         self.shared_noise_layers = self._buildSharedNoiseLayers()
+
+        # optional low-rank factor injection (applied before shared noise)
+        self.factor_layer = self._buildFactorLayer()
 
     def _buildSharedNoiseLayers(self) -> nn.ModuleList:
         """Create 0–3 shared noise components over random feature subsets."""
@@ -139,6 +145,16 @@ class SCM(nn.Module):
                 alpha = float(self.rng.uniform(0.05, 0.4))
                 layers.append(SharedNoiseLayer(indices, alpha))
         return nn.ModuleList(layers)
+
+    def _buildFactorLayer(self) -> FactorLayer | None:
+        """Create an optional low-rank factor injection layer."""
+        if self.n_features < 2 or self.p_factor <= 0:
+            return None
+        if self.rng.random() >= self.p_factor:
+            return None
+        n_factors = int(self.rng.integers(1, max(2, self.n_features // 2 + 1)))
+        alpha = float(self.rng.uniform(0.1, 0.8))
+        return FactorLayer(self.n_features, n_factors, alpha)
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:
         """Create one affine-noise-activation block."""
@@ -264,6 +280,10 @@ class SCM(nn.Module):
         else:
             idx = self._randomIndices(valid)
         x = outputs[:, idx]
+
+        # apply low-rank factor injection
+        if self.factor_layer is not None:
+            x = self.factor_layer(x)
 
         # apply shared noise groups
         for snl in self.shared_noise_layers:

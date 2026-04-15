@@ -106,10 +106,12 @@ class SCM(nn.Module):
     def _buildSharedNoiseLayers(self) -> nn.ModuleList:
         """Create 0–3 shared noise components over random feature subsets."""
         layers = []
+        if self.n_features < 2:
+            return nn.ModuleList(layers)
         if self.p_shared_noise > 0 and self.rng.random() < self.p_shared_noise:
             n_groups = int(self.rng.integers(1, 4))
             for _ in range(n_groups):
-                group_size = int(self.rng.integers(2, max(3, self.n_features)))
+                group_size = int(self.rng.integers(2, self.n_features + 1))
                 indices = torch.from_numpy(
                     self.rng.choice(
                         self.n_features, size=group_size, replace=False

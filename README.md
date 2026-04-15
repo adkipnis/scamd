@@ -21,11 +21,11 @@ Python ≥ 3.12 is required. Plotting requires `pandas` and `seaborn`.
 
 ```python
 import numpy as np
-from scamd import generate_dataset
+from scamd import generateDataset
 
 rng = np.random.default_rng(42)
 
-X = generate_dataset(
+X = generateDataset(
     n_samples=500,
     n_features=10,
     n_causes=15,
@@ -43,10 +43,10 @@ For a pair-grid plot of the first few features:
 ```python
 import pandas as pd
 from matplotlib import pyplot as plt
-from scamd import plot_dataset
+from scamd import plotDataset
 
 df = pd.DataFrame(X[:, :6], columns=[f'x{i+1}' for i in range(6)])
-plot_dataset(df, color='teal', title='SCAMD sample', kde=True)
+plotDataset(df, color='teal', title='SCAMD sample', kde=True)
 plt.show()
 ```
 
@@ -56,7 +56,7 @@ See `examples/quickstart.py` for a runnable script, and `examples/` for demos of
 
 ## Generation pipeline
 
-Each call to `generate_dataset` (or `Generator.sample`) runs three stages in sequence:
+Each call to `generateDataset` (or `Generator.sample`) runs three stages in sequence:
 
 ```
 CauseSampler  →  SCM  →  Posthoc
@@ -72,15 +72,17 @@ The pipeline starts by sampling a matrix of *latent causes* with shape `(n_sampl
 |---|---|
 | `'normal'` | Independent Gaussians, optionally with per-column mean and std drawn from N(0,1) |
 | `'uniform'` | Independent uniform draws, optionally shifted and scaled |
-| `'mixed'` | Each column is assigned to one of four families — Gaussian, uniform, multinomial, or Zipf — via a Dirichlet draw; columns are then randomly permuted |
+| `'mixed'` | Each column is assigned to one of nine families via a Dirichlet draw; columns are randomly permuted |
+
+The `'mixed'` mode draws from: Gaussian, uniform, multinomial, Zipf, **gamma** (random shape/scale — right-skewed), **log-normal** (random μ/σ — heavy right tail), **beta** (random a/b — bounded [0,1]), **Student-t** (random df ≥ 2.5 — heavy symmetric tails), and **mixture-Gaussian** (2–4 components with random weights/means — multimodal). All families are standardised to zero mean before the optional rescaling step.
 
 The `fixed=True` flag standardises all causes to zero mean and unit variance, making the SCM invariant to cause scale.
 
-### Stage 2 — Structural causal mechanism (`scm.py`, `pool.py`, `gp.py`, `meta.py`, `basic.py`)
+### Stage 2 — Structural causal mechanism (`scm.py`, `dag.py`, `pool.py`, `gp.py`, `meta.py`, `basic.py`)
 
-The causes are passed through a randomly initialised deep MLP. The MLP is *not* trained — its architecture and weights are sampled fresh for every dataset, so each draw is a different nonlinear generative mechanism.
+The causes are passed through a randomly initialised structural causal model. Two implementations are available: the default **MLP** (`SCM`) and an optional **sparse DAG** (`DAGSCM`). Both are untrained — weights and topology are sampled fresh for every dataset.
 
-#### MLP architecture
+#### MLP architecture (`SCM`)
 
 The network has `n_layers` blocks. Each block is:
 
@@ -89,6 +91,38 @@ Linear(in → n_hidden)  →  NoiseLayer(σ_e)  →  Activation()
 ```
 
 The first block takes `n_causes` inputs; subsequent blocks take `n_hidden`. The hidden width is automatically widened to at least `2 × n_features` to ensure there are enough distinct units to draw from. A small amount of independent Gaussian noise (`σ_e`, optionally varied per unit) is injected after each linear transform to prevent exact rank collapse.
+
+#### Noise calibration
+
+When `calibrate_noise=True` (the default for all presets), the MLP runs a noiseless pilot forward pass on the first call and measures the interquartile range (IQR) of each hidden unit across the pilot batch. Each `NoiseLayer`'s `σ_e` is then set to `calibration_frac × IQR` for that unit. This ensures additive noise is always proportional to signal magnitude regardless of network depth or activation scale — without it, noise can be negligible at early layers and overwhelming at later ones.
+
+#### Sparse DAG architecture (`DAGSCM`)
+
+The `DAGSCM` class replaces the dense MLP with a node-by-node forward pass over a randomly sampled directed acyclic graph. This produces sparser, more structured correlation patterns: each feature depends only on its direct causal parents, which eliminates the spurious correlations introduced when all features share a common latent path.
+
+```python
+from scamd import Generator
+import numpy as np
+
+gen = Generator.fromPreset(
+    n_features=10, n_causes=5, n_layers=3, n_hidden=16,
+    blockwise=False, preset='balanced_realistic',
+    use_dag=True,                  # switch to DAGSCM
+    rng=np.random.default_rng(0),
+)
+X = gen.sample(300)
+```
+
+Two graph topologies are supported:
+
+| `graph` | Description |
+|---|---|
+| `'barabasi_albert'` (default) | Scale-free DAG: a few hub nodes influence many features; most have 1–2 parents. Matches the heterogeneous dependency structure of real-world tabular data. |
+| `'erdos_renyi'` | Random sparse DAG with uniform expected in-degree. |
+
+Edges are oriented by node index to guarantee acyclicity. The `m` parameter controls the expected in-degree (default 2). Root nodes (no parents) are drawn from N(0,1) directly; non-root nodes compute `activation(W @ x_parents) + noise`. Observed features are read out from leaf nodes where possible.
+
+`DAGSCM` also supports noise calibration (`calibrate_noise=True`) via the same IQR-scaling approach as `SCM`.
 
 #### Weight initialisation
 
@@ -125,6 +159,10 @@ All layer outputs are concatenated into a matrix of shape `(n_samples, n_layers 
 
 If a forward pass produces fewer than `n_features` non-constant units, the SCM retries up to `max_retries` times.
 
+#### Shared noise groups
+
+`SCM` optionally injects *shared* latent noise: a single `z ~ N(0,1)` vector is drawn per sample and added (with random weight `α`) to a random subset of features. This creates structured residual correlation between features that is not explained by the causal MLP — mimicking batch effects or latent confounders. The probability of any shared noise firing is controlled by `p_shared_noise` (default 0.5); when it fires, 1–3 independent groups are created.
+
 ### Stage 3 — Post-hoc feature transforms (`posthoc.py`)
 
 Real design matrices contain discrete and categorical features — binary indicators, ordinal ratings, dummy-coded factors, count outcomes — that an MLP cannot produce directly. The post-hoc stage replaces a subset of continuous SCM columns with realistically structured discrete ones.
@@ -144,6 +182,8 @@ Every post-hoc layer first **mixes** the SCM features: it draws a weight matrix 
 | `Threshold` | Binarises each mixed feature at zero → binary column |
 | `MultiThreshold` | Counts how many of `levels−1` Gaussian-sampled thresholds a value exceeds → ordinal integer in [0, levels−1] |
 | `QuantileBins` | Assigns each value to a bin defined by `levels−1` data-driven quantile cut points → discrete integer |
+| `Clamp` | Clips values to random quantile-derived lower/upper bounds → continuous column with hard floor and ceiling effects |
+| `CensoredFloor` | Sets values below a random quantile threshold to exactly that threshold → left-censored continuous column, mimicking instrument detection limits |
 
 #### Stochastic transforms
 
@@ -172,11 +212,13 @@ Three named presets bundle sensible defaults for the activation pool and generat
 | `balanced_realistic` | All kernels, 3 random-choice layers | 0.35 | `mixed`, variable moments | Broad mix of smooth and rough functions with realistic discrete structure; the default |
 | `high_variability` | Fractional-heavy, 5 random-choice layers | 0.20 | `mixed`, variable moments | Rough, scale-free nonlinearities; stress-tests estimators on irregular signal |
 
+All three presets enable `calibrate_noise=True`.
+
 ```python
-from scamd import generate_dataset
+from scamd import generateDataset
 import numpy as np
 
-X = generate_dataset(
+X = generateDataset(
     n_samples=300,
     n_features=8,
     n_causes=12,
@@ -192,7 +234,7 @@ X = generate_dataset(
 
 ## API reference
 
-### `generate_dataset(**kwargs) → np.ndarray`
+### `generateDataset(**kwargs) → np.ndarray`
 
 Convenience function. Returns `(n_samples, n_features)` float64 array. All arguments except `rng` are required unless a preset supplies a default.
 
@@ -210,13 +252,16 @@ Convenience function. Returns `(n_samples, n_features)` float64 array. All argum
 | `cause_dist` | `str` or `None` | Root cause distribution: `'normal'`, `'uniform'`, `'mixed'` |
 | `fixed` | `bool` or `None` | Fix cause moments to zero mean / unit variance |
 | `p_posthoc` | `float` or `None` | Probability of any post-hoc transformation firing |
+| `use_dag` | `bool` | Use sparse DAG generator (`DAGSCM`) instead of MLP (`SCM`). Default `False`. |
 | `rng` | `np.random.Generator` or `None` | Explicit RNG for reproducibility |
+
+Additional keyword arguments are forwarded to `SCM` (e.g. `calibrate_noise`, `calibration_frac`, `p_shared_noise`) or `DAGSCM` (e.g. `n_latent`, `graph`, `m`).
 
 ### `Generator`
 
-The stateful class underlying `generate_dataset`. Construct via `Generator.from_preset(...)` for fine-grained control, or directly via `Generator(causes_config, scm_config, posthoc_config)`. Call `.sample(n_samples)` to draw datasets.
+The stateful class underlying `generateDataset`. Construct via `Generator.fromPreset(...)` for fine-grained control, or directly via `Generator(causes_config, scm_config, posthoc_config)`. Call `.sample(n_samples)`  to draw datasets.
 
-### `plot_dataset(x, ...)`
+### `plotDataset(x, ...)`
 
 Seaborn pair-grid with histograms on the diagonal, scatter above, and optional KDE below. Accepts a NumPy array or a pandas DataFrame.
 

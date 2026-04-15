@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 
-def plot_dataset(
+def plotDataset(
     x: np.ndarray | pd.DataFrame,
     names: list[str] | None = None,
     color: str = 'green',
@@ -18,7 +18,7 @@ def plot_dataset(
         import pandas as pd
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            'plot_dataset requires pandas; install scamd plotting dependencies'
+            'plotDataset requires pandas; install scamd plotting dependencies'
         ) from exc
 
     import seaborn as sns

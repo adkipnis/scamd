@@ -79,11 +79,18 @@ class QuantileBins(Base):
     """Discretize mixed features using data-driven quantile cut points."""
 
     def __init__(
-        self, n_in: int, n_out: int, standardize: bool = False, levels: int = 3
+        self,
+        n_in: int,
+        n_out: int,
+        standardize: bool = False,
+        levels: int = 3,
+        rng: np.random.Generator | None = None,
     ):
         super().__init__(n_in, n_out, standardize)
-        self.levels = levels  # number of quantiles
-        quantiles = np.sort(RNG.random(size=levels - 1))
+        self.levels = levels
+        if rng is None:
+            rng = np.random.default_rng(0)
+        quantiles = np.sort(rng.random(size=levels - 1))
         self.quantiles = torch.tensor(quantiles).float()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

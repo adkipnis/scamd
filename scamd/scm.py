@@ -59,7 +59,7 @@ class MarginalTransformLayer(nn.Module):
     def __init__(self, n_features: int, rng: np.random.Generator):
         super().__init__()
         types = rng.choice(self._TYPES, size=n_features)
-        powers = rng.uniform(0.3, 2.5, size=n_features).tolist()
+        powers = rng.uniform(0.3, 1.5, size=n_features).tolist()
         self.types: list[str] = types.tolist()
         self.powers: list[float] = powers
 

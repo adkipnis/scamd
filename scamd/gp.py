@@ -96,7 +96,9 @@ class GP(nn.Module):
                 p=[0.5, 0.2, 0.3],
             )
         elif gp_type not in KERNELS:
-            raise ValueError(f'Unknown kernel; choose from {list(KERNELS.keys())}')
+            raise ValueError(
+                f'Unknown kernel; choose from {list(KERNELS.keys())}'
+            )
         self.kernel = KERNELS[gp_type](rng)
 
         # sample random Fourier feature parameters

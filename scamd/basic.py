@@ -1,6 +1,5 @@
 """Collection of basic and handcrafted activation functions."""
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -49,7 +48,7 @@ class Cos(nn.Module):
 class Mod(nn.Module):
     def __init__(self, lower: float = 0.0, upper: float = 10.0):
         super().__init__()
-        self.k = np.random.uniform(lower, upper)
+        self.k = float(torch.rand(1)) * (upper - lower) + lower
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x % self.k

@@ -1,3 +1,5 @@
+"""Smoke tests covering the SCM pipeline: causes, SCM, posthoc, and the generation API."""
+
 import importlib
 import unittest
 

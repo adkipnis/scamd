@@ -1,10 +1,14 @@
+"""Verify that package source files use only the controlled rng API, not legacy numpy/random."""
+
 import unittest
 
 from scamd.utils import setSeed
 
 
 def _contains_forbidden_rng_calls(text: str) -> bool:
-    allowed = ('np.random.default_rng(',)
+    # Strip allowed patterns before checking for forbidden ones.
+    # np.random.Generator is a type annotation, not a random call.
+    allowed = ('np.random.default_rng(', 'np.random.Generator')
     for token in allowed:
         text = text.replace(token, '')
 

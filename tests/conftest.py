@@ -1,3 +1,5 @@
+"""pytest configuration: add the repo root to sys.path for test imports."""
+
 from pathlib import Path
 import sys
 

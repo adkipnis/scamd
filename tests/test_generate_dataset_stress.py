@@ -1,3 +1,5 @@
+"""Stress test: generate_dataset with 10k random hyperparameter draws (opt-in via env var)."""
+
 import os
 import unittest
 

@@ -81,7 +81,7 @@ class Generator:
         preset_cfg = get_dataset_preset(preset)
         pool_name = str(preset_cfg['pool_preset'])
         pool_cfg = get_pool_preset(pool_name)
-        pool = getActivations(**pool_cfg)
+        pool = getActivations(**pool_cfg, rng=shared_rng)
 
         causes_config: dict[str, Any] = {
             'n_causes': n_causes,
@@ -181,9 +181,14 @@ def generate_dataset(
     p_posthoc: float | None = None,
     cause_dist: str | None = None,
     fixed: bool | None = None,
+    rng: np.random.Generator | None = None,
     **config: Any,
 ) -> np.ndarray:
-    """Generate one standardized X-only synthetic dataset."""
+    """Generate one X-only synthetic dataset.
+
+    A convenience wrapper around ``Generator.from_preset`` that returns a
+    plain NumPy array with shape ``(n_samples, n_features)``.
+    """
     generator = Generator.from_preset(
         n_features=n_features,
         n_causes=n_causes,
@@ -196,6 +201,7 @@ def generate_dataset(
         p_posthoc=p_posthoc,
         cause_dist=cause_dist,
         fixed=fixed,
+        rng=rng,
         **config,
     )
     return generator.sample(n_samples=n_samples, return_numpy=True)

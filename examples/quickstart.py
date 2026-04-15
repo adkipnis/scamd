@@ -3,9 +3,9 @@
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from scamd import generate_dataset, plot_dataset
+from scamd import generateDataset, plotDataset
 
-x = generate_dataset(
+x = generateDataset(
     n_samples=300,
     n_features=8,
     n_causes=12,
@@ -16,5 +16,5 @@ x = generate_dataset(
 )
 
 df = pd.DataFrame(x[:, :4], columns=[f'x{i + 1}' for i in range(4)])
-plot_dataset(df, color='teal', title='scamd quickstart sample', kde=False)
+plotDataset(df, color='teal', title='scamd quickstart sample', kde=False)
 plt.show()

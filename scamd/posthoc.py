@@ -123,7 +123,12 @@ class Stochastic(Base):
 
 
 class Categorical(Stochastic):
-    """Sample one-hot categorical outputs from noisy logits."""
+    """Sample dummy-coded categorical outputs from noisy logits.
+
+    Produces n_out binary columns representing the non-reference levels of a
+    (n_out + 1)-level categorical variable — i.e. standard dummy coding.
+    Exactly one column is 1 per row (or all zeros for the reference level).
+    """
 
     def __init__(
         self,

@@ -231,6 +231,50 @@ class NegativeBinomial(Stochastic):
         return x
 
 
+class Clamp(Base):
+    """Clip values to random quantile-derived bounds, creating floor/ceiling effects."""
+
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int,
+        standardize: bool = False,
+        rng: np.random.Generator | None = None,
+    ):
+        super().__init__(n_in, n_out, standardize)
+        if rng is None:
+            rng = np.random.default_rng(0)
+        self.q_lo = float(rng.uniform(0.0, 0.15))
+        self.q_hi = float(rng.uniform(0.85, 1.0))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.preprocess(x)[..., 0]
+        lo = torch.quantile(x.flatten(), self.q_lo)
+        hi = torch.quantile(x.flatten(), self.q_hi)
+        return x.clamp(lo, hi)
+
+
+class CensoredFloor(Base):
+    """Replace values below a random quantile threshold with that threshold (detection-limit censoring)."""
+
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int,
+        standardize: bool = False,
+        rng: np.random.Generator | None = None,
+    ):
+        super().__init__(n_in, n_out, standardize)
+        if rng is None:
+            rng = np.random.default_rng(0)
+        self.q_floor = float(rng.uniform(0.05, 0.40))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.preprocess(x)[..., 0]
+        floor_val = torch.quantile(x.flatten(), self.q_floor)
+        return x.clamp(min=floor_val)
+
+
 POSTHOC_LAYERS = (
     Threshold,
     MultiThreshold,
@@ -238,6 +282,8 @@ POSTHOC_LAYERS = (
     Categorical,
     Poisson,
     NegativeBinomial,
+    Clamp,
+    CensoredFloor,
 )
 
 

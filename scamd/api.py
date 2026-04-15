@@ -101,6 +101,8 @@ class Generator:
         cause_dist: str | None = None,
         fixed: bool | None = None,
         use_dag: bool = False,
+        dag_m: int | None = None,
+        dag_graph: str | None = None,
         rng: np.random.Generator | None = None,
         max_retries: int = 8,
         **config: Any,
@@ -140,6 +142,15 @@ class Generator:
             if p_posthoc is not None
             else preset_cfg['p_posthoc'],
         }
+
+        # when using a DAG-SCM, sample graph topology parameters unless overridden
+        if use_dag:
+            scm_config['m'] = dag_m if dag_m is not None else int(
+                shared_rng.integers(1, 6)
+            )
+            scm_config['graph'] = dag_graph if dag_graph is not None else str(
+                shared_rng.choice(['barabasi_albert', 'erdos_renyi'])
+            )
 
         causes_keys = set(signature(CauseSampler).parameters)
         scm_keys = set(signature(SCM).parameters)
@@ -215,6 +226,8 @@ def generateDataset(
     cause_dist: str | None = None,
     fixed: bool | None = None,
     use_dag: bool = False,
+    dag_m: int | None = None,
+    dag_graph: str | None = None,
     rng: np.random.Generator | None = None,
     **config: Any,
 ) -> np.ndarray:
@@ -236,6 +249,8 @@ def generateDataset(
         cause_dist=cause_dist,
         fixed=fixed,
         use_dag=use_dag,
+        dag_m=dag_m,
+        dag_graph=dag_graph,
         rng=rng,
         **config,
     )

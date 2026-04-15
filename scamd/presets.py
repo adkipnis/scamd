@@ -38,18 +38,21 @@ DATASET_PRESETS: dict[str, dict[str, Any]] = {
         'cause_dist': 'uniform',
         'fixed': True,
         'pool_preset': 'smooth_stable',
+        'calibrate_noise': True,
     },
     'balanced_realistic': {
         'p_posthoc': 0.35,
         'cause_dist': 'mixed',
         'fixed': False,
         'pool_preset': 'balanced_realistic',
+        'calibrate_noise': True,
     },
     'high_variability': {
         'p_posthoc': 0.20,
         'cause_dist': 'mixed',
         'fixed': False,
         'pool_preset': 'high_variability',
+        'calibrate_noise': True,
     },
 }
 

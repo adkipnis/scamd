@@ -205,29 +205,47 @@ class Posthoc(nn.Module):
     def __init__(
         self,
         n_features: int,
-        p_posthoc: float = 0.2,  # probability of posthoc transformation
+        p_posthoc: float = 0.2,  # probability that *at least one* feature is transformed
         rng: np.random.Generator | None = None,
     ):
-        """Initialize a random set of post-hoc transformation layers."""
+        """Initialize a random set of post-hoc transformation layers.
+
+        p_posthoc is the probability that at least one feature is transformed.
+        When the dataset-level coin flip fires, the number of transformed
+        features is drawn from Binomial(n_features, p_posthoc) clamped to ≥1.
+        This prevents the structural under-firing that occurred for small d
+        when p_posthoc was applied independently per feature.
+        """
         super().__init__()
         self.n_features = n_features
         if rng is None:
             rng = np.random.default_rng(0)
         self.rng = rng
 
-        # draw number of posthoc features
-        self.n_posthoc = self.rng.binomial(n_features, p_posthoc)
+        # dataset-level flip: does any posthoc transformation happen at all?
+        if p_posthoc > 0 and self.rng.random() < p_posthoc:
+            self.n_posthoc = max(
+                1, int(self.rng.binomial(n_features, p_posthoc))
+            )
+        else:
+            self.n_posthoc = 0
 
-        # posthoc transformations
+        # build transformation layers
         layers = []
         for _ in range(self.n_posthoc):
-            cfg = {
+            # Fix C: wider range of dummy levels — up to max(4, n_features) levels
+            # so multi-level categoricals with more dummies can be represented.
+            n_out = int(self.rng.integers(1, max(4, n_features)))
+            layer_cls = self.rng.choice(POSTHOC_LAYERS)  # type: ignore
+            # Fix D: MultiThreshold and QuantileBins accept rng; others don't
+            cfg: dict = {
                 'n_in': n_features,
-                'n_out': self.rng.integers(1, 3),
+                'n_out': n_out,
                 'standardize': True,
             }
-            layer = self.rng.choice(POSTHOC_LAYERS)   # type: ignore
-            layers.append(layer(**cfg))
+            if layer_cls in (MultiThreshold, QuantileBins):
+                cfg['rng'] = self.rng
+            layers.append(layer_cls(**cfg))
         self.transformations = nn.ModuleList(layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

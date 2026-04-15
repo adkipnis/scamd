@@ -267,20 +267,39 @@ class Posthoc(nn.Module):
 
         # build transformation layers
         layers = []
+
         for _ in range(self.n_posthoc):
-            # Fix C: wider range of dummy levels — up to max(4, n_features) levels
-            # so multi-level categoricals with more dummies can be represented.
-            n_out = int(self.rng.integers(1, max(4, n_features)))
-            layer_cls = self.rng.choice(POSTHOC_LAYERS)  # type: ignore
-            # Fix D: MultiThreshold and QuantileBins accept rng; others don't
-            cfg: dict = {
-                'n_in': n_features,
-                'n_out': n_out,
-                'standardize': True,
-            }
-            if layer_cls in (MultiThreshold, QuantileBins):
-                cfg['rng'] = self.rng
-            layers.append(layer_cls(**cfg))
+            # With 40% probability use a CategoricalBlock, which generates
+            # dummies for multiple *independent* categorical variables in one
+            # shot.  This covers the common real-dataset pattern of several
+            # factor predictors each contributing their own mutually-exclusive
+            # dummy group (Type B design matrices), while also naturally
+            # producing the single-factor all-dummy pattern (Type A) when
+            # n_cats=1 with large n_levels.
+            if self.rng.random() < 0.40:
+                n_cats = int(self.rng.integers(1, max(3, n_features // 2) + 1))
+                n_levels = [
+                    int(self.rng.integers(2, max(4, n_features // max(1, n_cats)) + 1))
+                    for _ in range(n_cats)
+                ]
+                layers.append(
+                    CategoricalBlock(n_in=n_features, n_levels=n_levels, standardize=True)
+                )
+            else:
+                # n_out: number of output columns for this transform.
+                # Upper bound is inclusive of n_features so a single Categorical
+                # can cover all d columns (was off-by-one before).
+                n_out = int(self.rng.integers(1, max(4, n_features) + 1))
+                layer_cls = self.rng.choice(POSTHOC_LAYERS)  # type: ignore
+                cfg: dict = {
+                    'n_in': n_features,
+                    'n_out': n_out,
+                    'standardize': True,
+                }
+                if layer_cls in (MultiThreshold, QuantileBins):
+                    cfg['rng'] = self.rng
+                layers.append(layer_cls(**cfg))
+
         self.transformations = nn.ModuleList(layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

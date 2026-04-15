@@ -44,6 +44,37 @@ class SharedNoiseLayer(nn.Module):
         return x
 
 
+class MarginalTransformLayer(nn.Module):
+    """Apply per-feature monotone transforms to diversify marginal shapes.
+
+    Each feature independently receives one of: identity, signed power
+    ``sign(x)|x|^p``, or log-compression ``sign(x)log(1+|x|)``.  Mixing
+    transform types across features that share latent structure preserves
+    rank correlation (Spearman) while reducing Pearson, matching the
+    Spearman > Pearson pattern common in real datasets.
+    """
+
+    _TYPES = ('identity', 'signed_power', 'log1p')
+
+    def __init__(self, n_features: int, rng: np.random.Generator):
+        super().__init__()
+        types = rng.choice(self._TYPES, size=n_features)
+        powers = rng.uniform(0.3, 2.5, size=n_features).tolist()
+        self.types: list[str] = types.tolist()
+        self.powers: list[float] = powers
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cols = []
+        for j, (t, p) in enumerate(zip(self.types, self.powers)):
+            col = x[:, j]
+            if t == 'signed_power':
+                col = col.sign() * col.abs().clamp(max=1e3).pow(p)
+            elif t == 'log1p':
+                col = col.sign() * (col.abs() + 1.0).log()
+            cols.append(col)
+        return torch.stack(cols, dim=1)
+
+
 class FactorLayer(nn.Module):
     """Inject a low-rank factor structure to increase inter-feature correlation.
 
@@ -87,6 +118,8 @@ class SCM(nn.Module):
         calibration_n: int = 256,  # pilot batch size for calibration
         # shared noise groups
         p_shared_noise: float = 0.5,  # probability of adding any shared noise
+        # per-feature monotone marginal transforms
+        p_marginal_transform: float = 0.5,  # probability of adding MarginalTransformLayer
         # low-rank factor injection
         p_factor: float = 0.5,  # probability of adding a FactorLayer
         # misc
@@ -108,6 +141,7 @@ class SCM(nn.Module):
         self.calibration_frac = calibration_frac
         self.calibration_n = calibration_n
         self.p_shared_noise = p_shared_noise
+        self.p_marginal_transform = p_marginal_transform
         self.p_factor = p_factor
         if rng is None:
             rng = np.random.default_rng(0)
@@ -124,6 +158,9 @@ class SCM(nn.Module):
 
         # build shared noise layers (applied after feature extraction)
         self.shared_noise_layers = self._buildSharedNoiseLayers()
+
+        # optional per-feature monotone marginal transforms (applied before shared noise)
+        self.marginal_transform = self._buildMarginalTransform()
 
         # optional low-rank factor injection (applied before shared noise)
         self.factor_layer = self._buildFactorLayer()
@@ -145,6 +182,12 @@ class SCM(nn.Module):
                 alpha = float(self.rng.uniform(0.05, 0.4))
                 layers.append(SharedNoiseLayer(indices, alpha))
         return nn.ModuleList(layers)
+
+    def _buildMarginalTransform(self) -> MarginalTransformLayer | None:
+        """Create an optional per-feature monotone transform layer."""
+        if self.p_marginal_transform <= 0 or self.rng.random() >= self.p_marginal_transform:
+            return None
+        return MarginalTransformLayer(self.n_features, self.rng)
 
     def _buildFactorLayer(self) -> FactorLayer | None:
         """Create an optional low-rank factor injection layer."""
@@ -288,6 +331,10 @@ class SCM(nn.Module):
         # apply shared noise groups
         for snl in self.shared_noise_layers:
             x = snl(x)
+
+        # apply per-feature monotone marginal transforms
+        if self.marginal_transform is not None:
+            x = self.marginal_transform(x)
 
         # sanity check
         if sanityCheck(x):

@@ -49,7 +49,7 @@ class Cos(nn.Module):
 class Mod(nn.Module):
     def __init__(self, lower: float = 0.0, upper: float = 10.0):
         super().__init__()
-        self.k = np.random.rand(lower, upper)
+        self.k = np.random.uniform(lower, upper)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x % self.k

@@ -161,6 +161,41 @@ class Categorical(Stochastic):
         return out
 
 
+class CategoricalBlock(nn.Module):
+    """Dummy columns for multiple independent categorical variables in one shot.
+
+    Models the structure of real design matrices: k categorical predictors, each
+    contributing (n_levels_i - 1) binary dummy columns.  Within each group the
+    columns are mutually exclusive (exactly one is 1 per row, or all zeros for
+    the reference level); across groups they are independent because each
+    categorical gets its own Dirichlet mixing weights.
+
+    n_levels is a list of per-categorical level counts (≥ 2 each).
+    Total output columns = sum(n_levels_i - 1).
+    """
+
+    def __init__(
+        self,
+        n_in: int,
+        n_levels: list[int],
+        standardize: bool = False,
+        sigma: float = 0.01,
+    ):
+        super().__init__()
+        self.cats = nn.ModuleList([
+            Categorical(n_in=n_in, n_out=k - 1, standardize=standardize, sigma=sigma)
+            for k in n_levels
+        ])
+
+    @property
+    def n_out(self) -> int:
+        return sum(c.n_out for c in self.cats)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Generate dummies for each categorical and concatenate."""
+        return torch.cat([c(x) for c in self.cats], dim=-1)
+
+
 class Poisson(Stochastic):
     """Sample count-valued outputs using a Poisson likelihood."""
 

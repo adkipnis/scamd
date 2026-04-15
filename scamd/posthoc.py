@@ -258,10 +258,14 @@ class Posthoc(nn.Module):
                 if sanityCheck(h):
                     out.append(h)
 
-            # append them to the original and take a subset of both
+            # Fix A: posthoc columns always replace SCM columns rather than
+            # competing with them in a random permutation.  Cap at n_features,
+            # then fill the remainder with randomly chosen SCM columns.
             if out:
                 z = torch.cat(out, dim=-1)
-                x = torch.cat([x, z], dim=-1)
-                idx = torch.randperm(x.shape[-1])[: self.n_features]
-                x = x[..., idx]
+                n_keep_posthoc = min(z.shape[-1], self.n_features)
+                n_keep_scm = self.n_features - n_keep_posthoc
+                scm_idx = torch.randperm(x.shape[-1])[:n_keep_scm]
+                ph_idx = torch.randperm(z.shape[-1])[:n_keep_posthoc]
+                x = torch.cat([x[:, scm_idx], z[:, ph_idx]], dim=-1)
         return x

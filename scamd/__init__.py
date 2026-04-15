@@ -1,26 +1,31 @@
 """Convenience exports for dataset generation and SCM models."""
 
-from .api import Generator, generate_dataset
-from .plotting import plot_dataset
+from .api import Generator, generateDataset
+from .dag import DAGSCM
+from .plotting import plotDataset
 from .presets import (
     DATASET_PRESETS,
     POOL_PRESETS,
     PRESET_LABELS,
-    get_dataset_preset,
-    get_pool_preset,
+    getDatasetPreset,
+    getPoolPreset,
 )
-from .scm import SCM
-from .posthoc import Posthoc
+from .scm import SCM, SharedNoiseLayer
+from .posthoc import Posthoc, Clamp, CensoredFloor
 
 __all__ = [
     'SCM',
+    'DAGSCM',
+    'SharedNoiseLayer',
     'Posthoc',
+    'Clamp',
+    'CensoredFloor',
     'Generator',
-    'generate_dataset',
-    'plot_dataset',
+    'generateDataset',
+    'plotDataset',
     'POOL_PRESETS',
     'DATASET_PRESETS',
     'PRESET_LABELS',
-    'get_pool_preset',
-    'get_dataset_preset',
+    'getPoolPreset',
+    'getDatasetPreset',
 ]

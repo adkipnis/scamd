@@ -332,11 +332,17 @@ class Posthoc(nn.Module):
             if self.rng.random() < 0.40:
                 n_cats = int(self.rng.integers(1, max(3, n_features // 2) + 1))
                 n_levels = [
-                    int(self.rng.integers(2, max(4, n_features // max(1, n_cats)) + 1))
+                    int(
+                        self.rng.integers(
+                            2, max(4, n_features // max(1, n_cats)) + 1
+                        )
+                    )
                     for _ in range(n_cats)
                 ]
                 layers.append(
-                    CategoricalBlock(n_in=n_features, n_levels=n_levels, standardize=True)
+                    CategoricalBlock(
+                        n_in=n_features, n_levels=n_levels, standardize=True
+                    )
                 )
             else:
                 # n_out: number of output columns for this transform.
@@ -349,7 +355,12 @@ class Posthoc(nn.Module):
                     'n_out': n_out,
                     'standardize': True,
                 }
-                if layer_cls in (MultiThreshold, QuantileBins):
+                if layer_cls in (
+                    MultiThreshold,
+                    QuantileBins,
+                    Clamp,
+                    CensoredFloor,
+                ):
                     cfg['rng'] = self.rng
                 layers.append(layer_cls(**cfg))
 

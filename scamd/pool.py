@@ -23,6 +23,7 @@ def getActivations(
     n_choice: int = 1,
     allow_nested_random_choice: bool = False,
     include_basic: bool = True,
+    rng: np.random.Generator | None = None,
 ) -> list[Callable]:
     """Build activation callables used by SCM layers.
 
@@ -41,6 +42,8 @@ def getActivations(
             sample other random-choice activations. If `False`, they sample only
             from the base activation pool.
         include_basic: Include handcrafted/basic activations in the base pool.
+        rng: NumPy Generator used for kernel-type sampling.  Creates a fresh
+            one (random seed) when None.
     """
     if n_gp < 0:
         raise ValueError('n_gp must be >= 0')
@@ -58,12 +61,15 @@ def getActivations(
         raise ValueError('gp_type_probs must be non-negative and sum to > 0')
     probs = probs / probs.sum()
 
+    if rng is None:
+        rng = np.random.default_rng()
+
     base_pool: list[Callable] = []
     if include_basic:
         base_pool.extend(basic_activations.copy())
 
     # Add GP factories with explicit kernel draws to control morphology mix.
-    sampled_gp_types = np.random.choice(gp_types, size=n_gp, p=probs)
+    sampled_gp_types = rng.choice(list(gp_types), size=n_gp, p=probs)
     base_pool.extend(
         partial(GP, gp_type=str(gp_type)) for gp_type in sampled_gp_types
     )

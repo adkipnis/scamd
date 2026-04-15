@@ -389,7 +389,7 @@ class Posthoc(nn.Module):
                         n_in=n_features, n_levels=n_levels, standardize=True
                     )
                 )
-            elif r < 0.60:
+            elif r < 0.40:
                 n_out = int(self.rng.integers(2, max(4, n_features // 2) + 1))
                 layers.append(OrdinalBlock(n_in=n_features, n_out=n_out, rng=self.rng))
             else:

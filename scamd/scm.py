@@ -119,9 +119,9 @@ class SCM(nn.Module):
         # shared noise groups
         p_shared_noise: float = 0.5,  # probability of adding any shared noise
         # per-feature monotone marginal transforms
-        p_marginal_transform: float = 0.5,  # probability of adding MarginalTransformLayer
+        p_marginal_transform: float = 0.7,  # probability of adding MarginalTransformLayer
         # low-rank factor injection
-        p_factor: float = 0.5,  # probability of adding a FactorLayer
+        p_factor: float = 0.7,  # probability of adding a FactorLayer
         # misc
         rng: np.random.Generator | None = None,
     ):
@@ -196,7 +196,7 @@ class SCM(nn.Module):
         if self.rng.random() >= self.p_factor:
             return None
         n_factors = int(self.rng.integers(1, max(2, self.n_features // 2 + 1)))
-        alpha = float(self.rng.uniform(0.1, 0.8))
+        alpha = float(self.rng.uniform(0.1, 1.2))
         return FactorLayer(self.n_features, n_factors, alpha)
 
     def _buildLayer(self, input_dim: int = 0) -> nn.Module:

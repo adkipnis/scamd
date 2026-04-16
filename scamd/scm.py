@@ -4,6 +4,7 @@ from typing import Callable
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from scamd.utils import hasConstantColumns, sanityCheck
 
@@ -54,11 +55,16 @@ class MarginalTransformLayer(nn.Module):
     Spearman > Pearson pattern common in real datasets.
     """
 
-    _TYPES = ('identity', 'signed_power', 'log1p')
+    # Symmetric types preserve zero-mean; asymmetric types introduce positive skew.
+    # Weights bias sampling toward asymmetric types to close the skewness coverage gap.
+    _TYPES = ('identity', 'signed_power', 'log1p', 'softplus', 'exp_clamp')
+    _PROBS = (1.0,        1.0,            1.0,     2.0,        2.0)
 
     def __init__(self, n_features: int, rng: np.random.Generator):
         super().__init__()
-        types = rng.choice(self._TYPES, size=n_features)
+        p = np.array(self._PROBS, dtype=float)
+        p /= p.sum()
+        types = rng.choice(self._TYPES, size=n_features, p=p)
         powers = rng.uniform(0.3, 1.5, size=n_features).tolist()
         self.types: list[str] = types.tolist()
         self.powers: list[float] = powers
@@ -71,6 +77,10 @@ class MarginalTransformLayer(nn.Module):
                 col = col.sign() * col.abs().clamp(max=1e3).pow(p)
             elif t == 'log1p':
                 col = col.sign() * (col.abs() + 1.0).log()
+            elif t == 'softplus':
+                col = F.softplus(col)   # log(1 + exp(x)); monotone, positive skew
+            elif t == 'exp_clamp':
+                col = col.clamp(-4.0, 4.0).exp()  # log-normal style; strong positive skew
             cols.append(col)
         return torch.stack(cols, dim=1)
 

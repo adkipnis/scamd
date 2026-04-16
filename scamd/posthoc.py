@@ -397,7 +397,15 @@ class Posthoc(nn.Module):
                 # Upper bound is inclusive of n_features so a single Categorical
                 # can cover all d columns (was off-by-one before).
                 n_out = int(self.rng.integers(1, max(4, n_features) + 1))
-                layer_cls = self.rng.choice(POSTHOC_LAYERS)  # type: ignore
+                # upweight skew-inducing layers (Poisson, NegBinomial, CensoredFloor)
+                # to close the skewness coverage gap observed in diagnostic benchmarks
+                _SKEW_LAYERS = (Poisson, NegativeBinomial, CensoredFloor)
+                weights = np.array(
+                    [3.0 if cls in _SKEW_LAYERS else 1.0 for cls in POSTHOC_LAYERS],
+                    dtype=float,
+                )
+                weights /= weights.sum()
+                layer_cls = self.rng.choice(POSTHOC_LAYERS, p=weights)  # type: ignore
                 cfg: dict = {
                     'n_in': n_features,
                     'n_out': n_out,

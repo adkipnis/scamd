@@ -3,6 +3,8 @@ name = "scamd"
 version = "0.1.0"
 description = "Structural causal models for simulating realistic datasets"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "blue>=0.9.1",
